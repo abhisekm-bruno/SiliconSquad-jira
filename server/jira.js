@@ -171,6 +171,37 @@ export class JiraClient {
     });
   }
 
+  /** Every sprint on the board, newest first, so the lead can pick one. */
+  async sprints(boardId, { keepClosed = 8 } = {}) {
+    const all = [];
+    let startAt = 0;
+    let isLast = false;
+
+    while (!isLast && all.length < 500) {
+      const page = await this.request(`/rest/agile/1.0/board/${boardId}/sprint`, {
+        query: { startAt, maxResults: 50 }
+      });
+      all.push(...(page.values || []));
+      isLast = page.isLast ?? true;
+      startAt += 50;
+      if (!page.values?.length) break;
+    }
+
+    const byRecency = (a, b) =>
+      new Date(b.startDate || b.createdDate || 0) - new Date(a.startDate || a.createdDate || 0);
+
+    const open = all.filter((sprint) => sprint.state !== 'closed').sort(byRecency);
+    const closed = all.filter((sprint) => sprint.state === 'closed').sort(byRecency).slice(0, keepClosed);
+
+    return [...open, ...closed].map((sprint) => ({
+      id: sprint.id,
+      name: sprint.name,
+      state: sprint.state,
+      startDate: sprint.startDate || null,
+      endDate: sprint.endDate || null
+    }));
+  }
+
   projectStatuses(projectKeyOrId) {
     return this.request(`/rest/api/3/project/${encodeURIComponent(projectKeyOrId)}/statuses`);
   }

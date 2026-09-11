@@ -84,6 +84,50 @@ const buildTimeline = (transitions, workflow, issueCreated, currentStatus) => {
   };
 };
 
+/**
+ * Who is QA on this ticket. Jira has no standard field for it, so unless the
+ * project has one configured we infer it from the changelog: the person who
+ * moved the ticket *out of* a QA status is the one who tested it.
+ */
+const deriveQaOwner = (transitions, workflow, qaFieldValue) => {
+  if (qaFieldValue?.displayName) {
+    return { name: qaFieldValue.displayName, accountId: qaFieldValue.accountId || null, source: 'field' };
+  }
+
+  const outOfQa = [...transitions]
+    .reverse()
+    .find((transition) => isInBucket(workflow, 'qa', transition.from));
+
+  if (outOfQa) {
+    return { name: outOfQa.by, accountId: outOfQa.byAccountId, source: 'transition' };
+  }
+
+  return null;
+};
+
+/**
+ * Estimated days. Prefers an explicit time estimate, falls back to story points
+ * converted at the team's own rate.
+ */
+const deriveEstimateDays = (rawFields, storyPoints, estimateConfig) => {
+  const seconds = rawFields.timeoriginalestimate ?? rawFields.timeestimate ?? null;
+  if (seconds) return Number((seconds / 3600 / estimateConfig.hoursPerDay).toFixed(2));
+
+  if (typeof storyPoints === 'number') return Number((storyPoints * estimateConfig.pointsToDays).toFixed(2));
+
+  return null;
+};
+
+/** Working days a ticket has been actively worked, excluding time in To Do. */
+const activeDays = (transitions, workflow, issueCreated) => {
+  const started = transitions.find((transition) => isInBucket(workflow, 'inProgress', transition.to));
+  const finished = lastTransitionInto(transitions, workflow, 'done');
+  const from = started ? new Date(started.at) : new Date(issueCreated);
+  const to = finished ? new Date(finished.at) : new Date();
+
+  return Number(Math.max(0, (to - from) / DAY_MS).toFixed(2));
+};
+
 const summarisePullRequest = (pullRequest) => ({
   id: pullRequest.id,
   name: pullRequest.name,
@@ -147,6 +191,14 @@ const computeFlags = (issue, thresholds) => {
     });
   }
 
+  if (issue.overEstimate) {
+    flags.push({
+      id: 'over-estimate',
+      label: `${issue.activeDays.toFixed(1)}d vs ${issue.estimateDays}d estimate`,
+      severity: 'medium'
+    });
+  }
+
   if (timeline.qaBounces > 0) {
     flags.push({
       id: 'qa-bounce',
@@ -183,19 +235,29 @@ export const buildJql = (config, sprintClause) => {
   return `${clauses.join(' AND ')} ORDER BY updated DESC`;
 };
 
-const resolveSprintClause = async (jira, config) => {
-  if (config.sprintScope === 'none' || !config.boardId) return { clause: null, sprint: null };
+const resolveSprintClause = async (jira, config, requestedSprintId) => {
+  if (!config.boardId) return { clause: null, sprint: null, sprints: [] };
 
-  if (config.sprintScope === 'open') return { clause: 'sprint in openSprints()', sprint: null };
-
+  let sprints = [];
   try {
-    const { values = [] } = await jira.activeSprints(config.boardId);
-    if (!values.length) return { clause: null, sprint: null };
-    const [sprint] = values;
-    return { clause: `sprint = ${sprint.id}`, sprint: { id: sprint.id, name: sprint.name, endDate: sprint.endDate } };
+    sprints = await jira.sprints(config.boardId);
   } catch {
-    return { clause: null, sprint: null };
+    sprints = [];
   }
+
+  // An explicit pick from the dropdown always wins over the configured scope.
+  if (requestedSprintId) {
+    const sprint = sprints.find((candidate) => String(candidate.id) === String(requestedSprintId));
+    return { clause: `sprint = ${Number(requestedSprintId)}`, sprint: sprint || null, sprints };
+  }
+
+  if (config.sprintScope === 'none') return { clause: null, sprint: null, sprints };
+  if (config.sprintScope === 'open') return { clause: 'sprint in openSprints()', sprint: null, sprints };
+
+  const active = sprints.find((sprint) => sprint.state === 'active');
+  if (!active) return { clause: null, sprint: null, sprints };
+
+  return { clause: `sprint = ${active.id}`, sprint: active, sprints };
 };
 
 const findStoryPointsFieldId = async (jira) => {
@@ -208,8 +270,8 @@ const findStoryPointsFieldId = async (jira) => {
   }
 };
 
-export const buildStandup = async (jira, config, { lookbackHours }) => {
-  const { clause: sprintClause, sprint } = await resolveSprintClause(jira, config);
+export const buildStandup = async (jira, config, { lookbackHours, sprintId }) => {
+  const { clause: sprintClause, sprint, sprints } = await resolveSprintClause(jira, config, sprintId);
   const storyPointsFieldId = await findStoryPointsFieldId(jira);
 
   const jql = buildJql(config, sprintClause);
@@ -224,7 +286,10 @@ export const buildStandup = async (jira, config, { lookbackHours }) => {
     'updated',
     'duedate',
     'parent',
-    ...(storyPointsFieldId ? [storyPointsFieldId] : [])
+    'timeoriginalestimate',
+    'timeestimate',
+    ...(storyPointsFieldId ? [storyPointsFieldId] : []),
+    ...(config.qaFieldId ? [config.qaFieldId] : [])
   ];
 
   const rawIssues = await jira.search(jql, { fields });
@@ -266,8 +331,14 @@ export const buildStandup = async (jira, config, { lookbackHours }) => {
         : null,
       pullRequests: pullRequests.map(summarisePullRequest),
       transitions,
-      timeline: buildTimeline(transitions, config.workflow, raw.fields.created, statusName)
+      timeline: buildTimeline(transitions, config.workflow, raw.fields.created, statusName),
+      qaOwner: deriveQaOwner(transitions, config.workflow, config.qaFieldId ? raw.fields[config.qaFieldId] : null),
+      activeDays: activeDays(transitions, config.workflow, raw.fields.created)
     };
+
+    issue.estimateDays = deriveEstimateDays(raw.fields, issue.storyPoints, config.estimate);
+    issue.overEstimate =
+      issue.estimateDays !== null && issue.bucket !== 'done' && issue.activeDays > issue.estimateDays;
 
     issue.flags = computeFlags(issue, config.thresholds);
     return issue;
@@ -278,6 +349,7 @@ export const buildStandup = async (jira, config, { lookbackHours }) => {
     team: config.team.name,
     jql,
     sprint,
+    sprints,
     lookbackHours,
     jiraBaseUrl: jira.baseUrl,
     issues,

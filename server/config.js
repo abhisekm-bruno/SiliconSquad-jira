@@ -53,6 +53,8 @@ const DEFAULTS = {
   doneLookbackDays: 14,
   defaultLookbackHours: 24,
   devStatusApplicationTypes: ['GitHub'],
+  qaFieldId: null,
+  estimate: { hoursPerDay: 8, pointsToDays: 1 },
   extraJql: ''
 };
 
@@ -74,7 +76,8 @@ export const loadConfig = () => {
     ...parsed,
     team: { ...DEFAULTS.team, ...parsed.team },
     workflow: { ...DEFAULTS.workflow, ...parsed.workflow },
-    thresholds: { ...DEFAULTS.thresholds, ...parsed.thresholds }
+    thresholds: { ...DEFAULTS.thresholds, ...parsed.thresholds },
+    estimate: { ...DEFAULTS.estimate, ...parsed.estimate }
   };
 
   if (!config.projectKey && !config.boardId) {

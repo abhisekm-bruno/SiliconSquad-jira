@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node server/index.js",
-    "discover": "node scripts/discover.js"
+    "discover": "node scripts/discover.js",
+    "check": "node scripts/check.js"
   }
 }

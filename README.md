@@ -14,9 +14,20 @@ from the account IDs you list in `config.json`.
 
 ## Why it looks like this
 
+### Running the call
+
+Along the top: **Sprint → Developer → QA**. The lead picks the sprint, then walks down the
+developer list; each developer's tickets appear as a table below. Changing sprint refetches;
+changing developer or QA filters what's already loaded, so it's instant mid-call.
+
+Each ticket row is one line: **short title · developer · QA · estimate · PR · status · age**.
+The estimate is highlighted — blue while on track, **red once actual days exceed it**, with the
+overage shown (`2d +3.0` = estimated 2 days, running 3 over). PR lives in its own column with
+open/merged/declined, approval count, and how long it's been idle.
+
 | View | What it's for |
 | --- | --- |
-| **By developer** | The standup running order. One card per teammate, their tickets grouped by lane. A teammate with nothing assigned still gets a card — that's a talking point, not a gap. |
+| **Standup** | The running order. One block per developer, their tickets as a table. A teammate with nothing assigned still gets a block — that's a talking point, not a gap. |
 | **Board** | The familiar column view, scoped to your team. |
 | **Since last standup** | Every status move in the window, split into **Handed to QA**, **QA signed off to Done**, and everything else. This is the "what moved yesterday" section. |
 | **Needs attention** | Only the high-severity flags: blocked, stale in review/QA, bounced back from QA, done-but-PR-still-open. |
@@ -98,6 +109,14 @@ Open <http://localhost:5123>. Each view is bookmarkable — `#activity` opens st
     "stalePrDays": 2
   },
 
+  "estimate": {
+    "hoursPerDay": 8,        // converts a Jira time estimate into days
+    "pointsToDays": 1        // fallback: story points x this = days
+  },
+
+  "qaFieldId": null,         // optional: a custom field holding the QA engineer,
+                             // e.g. "customfield_10050". Leave null to infer it.
+
   "doneLookbackDays": 14,    // how far back completed tickets stay on the board
   "defaultLookbackHours": 24,// the "since last standup" window
   "extraJql": ""             // any extra JQL, ANDed in — e.g. "labels != tech-debt"
@@ -118,6 +137,23 @@ issue's **changelog**:
 - `qaCycleHours` — elapsed time between those two.
 - `qaBounces` — how many times a ticket left QA *without* going to Done. Surfaces as a
   "Bounced from QA" flag, which is usually the most useful thing on the board.
+
+## Where the QA name comes from
+
+Jira has no standard "QA engineer" field, so the app infers it: **the person who moved the
+ticket out of a QA status** is the one who tested it. That is who signed it off to Done, or who
+bounced it back. A ticket sitting in QA that nobody has touched yet shows *picking up*.
+
+If your project does have a QA field, set `qaFieldId` to its custom field id and that wins over
+the inference. `npm run discover` does not print field ids; get them from
+`/rest/api/3/field` on your site, or ask your Jira admin.
+
+## Estimates
+
+`Est.` prefers Jira's original time estimate, converted at `hoursPerDay`. If a ticket has no time
+estimate it falls back to story points times `pointsToDays`. Actual elapsed is measured from the
+first move into an In Progress status until Done (or now), so time sitting in the backlog doesn't
+count against the estimate.
 
 ## PR status
 
@@ -148,4 +184,17 @@ server/
 public/        the dashboard (no build step, plain modules)
 scripts/
   discover.js  prints boards, statuses and accountIds for config.json
+  check.js     narrows the JQL clause by clause when the board comes back empty
 ```
+
+## Troubleshooting
+
+**The board is empty.** Run `npm run check`. It narrows the query one clause at a time and marks
+which one drops the count to zero, then prints who actually has tickets in the project (with
+their account IDs) and every status name in use — the two things `config.json` needs.
+
+**"No active sprint".** Either the board has no sprint running, or `boardId` is unset. Pick a
+sprint from the dropdown, or set `"sprintScope": "none"` to show the whole project.
+
+**Everyone's tickets show, not just my team.** `team.members[].accountId` is empty. Without
+account IDs there is no assignee filter at all.

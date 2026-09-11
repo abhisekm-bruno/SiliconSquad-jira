@@ -58,8 +58,9 @@ const handleStandup = async (request, response) => {
   const url = new URL(request.url, 'http://localhost');
   const config = loadConfig();
   const lookbackHours = Number(url.searchParams.get('lookbackHours')) || config.defaultLookbackHours;
+  const sprintId = url.searchParams.get('sprintId') || null;
   const force = url.searchParams.get('refresh') === 'true';
-  const cacheKey = `standup:${lookbackHours}`;
+  const cacheKey = `standup:${lookbackHours}:${sprintId ?? 'default'}`;
 
   const cached = cache.get(cacheKey);
   if (!force && cached && Date.now() - cached.at < CACHE_TTL_MS) {
@@ -68,7 +69,7 @@ const handleStandup = async (request, response) => {
   }
 
   const jira = new JiraClient(loadCredentials());
-  const payload = await buildStandup(jira, config, { lookbackHours });
+  const payload = await buildStandup(jira, config, { lookbackHours, sprintId });
 
   cache.set(cacheKey, { at: Date.now(), payload });
   sendJson(response, 200, { ...payload, cached: false });
