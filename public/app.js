@@ -316,6 +316,7 @@ const renderEmptyState = (data) => `
     <pre>${escapeHtml(data.jql)}</pre>
     <p>Most likely one of these:</p>
     <ul>
+      ${data.boardId ? '' : '<li><strong>No board found.</strong> The app looks one up from <code>projectKey</code>; if your team uses a board under a different project, set <code>boardId</code> explicitly. <code>npm run discover -- YOURKEY</code> prints the ids.</li>'}
       ${data.sprint ? '' : '<li><strong>No active sprint.</strong> Pick one from the Sprint dropdown, or set <code>"sprintScope": "none"</code> in config.json to show the whole project.</li>'}
       <li><strong>The <code>assignee in (...)</code> list is wrong or empty.</strong> Those must be Jira <em>accountIds</em>, not names or emails.</li>
       <li><strong>Wrong <code>projectKey</code></strong> for your team's board.</li>
@@ -335,9 +336,11 @@ const syncSelectors = (data) => {
   const sprintOptions = data.sprints?.length
     ? data.sprints.map((sprint) => ({
         value: sprint.id,
-        label: sprint.state === 'active' ? `${sprint.name} (active)` : `${sprint.name} — ${sprint.state}`
+        label: sprint.state === 'active' ? `${sprint.name}  ·  active` : `${sprint.name}  ·  ${sprint.state}`
       }))
-    : [{ value: '', label: 'No board configured' }];
+    : [{ value: '', label: data.boardId ? 'No sprints on this board' : 'No board found for this project' }];
+
+  elements.sprint.disabled = !data.sprints?.length;
 
   fillSelect(elements.sprint, sprintOptions, state.sprintId || data.sprint?.id || '');
 

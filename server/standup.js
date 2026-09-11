@@ -235,12 +235,31 @@ export const buildJql = (config, sprintClause) => {
   return `${clauses.join(' AND ')} ORDER BY updated DESC`;
 };
 
+/**
+ * The board id is the one bit of config nobody knows offhand, so find it from
+ * the project when it isn't set. Prefers a scrum board, since only those have
+ * sprints.
+ */
+const resolveBoardId = async (jira, config) => {
+  if (config.boardId) return config.boardId;
+  if (!config.projectKey) return null;
+
+  try {
+    const { values = [] } = await jira.boards(config.projectKey);
+    const scrum = values.find((board) => board.type === 'scrum');
+    return (scrum || values[0])?.id ?? null;
+  } catch {
+    return null;
+  }
+};
+
 const resolveSprintClause = async (jira, config, requestedSprintId) => {
-  if (!config.boardId) return { clause: null, sprint: null, sprints: [] };
+  const boardId = await resolveBoardId(jira, config);
+  if (!boardId) return { clause: null, sprint: null, sprints: [], boardId: null };
 
   let sprints = [];
   try {
-    sprints = await jira.sprints(config.boardId);
+    sprints = await jira.sprints(boardId);
   } catch {
     sprints = [];
   }
@@ -248,16 +267,16 @@ const resolveSprintClause = async (jira, config, requestedSprintId) => {
   // An explicit pick from the dropdown always wins over the configured scope.
   if (requestedSprintId) {
     const sprint = sprints.find((candidate) => String(candidate.id) === String(requestedSprintId));
-    return { clause: `sprint = ${Number(requestedSprintId)}`, sprint: sprint || null, sprints };
+    return { clause: `sprint = ${Number(requestedSprintId)}`, sprint: sprint || null, sprints, boardId };
   }
 
-  if (config.sprintScope === 'none') return { clause: null, sprint: null, sprints };
-  if (config.sprintScope === 'open') return { clause: 'sprint in openSprints()', sprint: null, sprints };
+  if (config.sprintScope === 'none') return { clause: null, sprint: null, sprints, boardId };
+  if (config.sprintScope === 'open') return { clause: 'sprint in openSprints()', sprint: null, sprints, boardId };
 
   const active = sprints.find((sprint) => sprint.state === 'active');
-  if (!active) return { clause: null, sprint: null, sprints };
+  if (!active) return { clause: null, sprint: null, sprints, boardId };
 
-  return { clause: `sprint = ${active.id}`, sprint: active, sprints };
+  return { clause: `sprint = ${active.id}`, sprint: active, sprints, boardId };
 };
 
 const findStoryPointsFieldId = async (jira) => {
@@ -271,7 +290,7 @@ const findStoryPointsFieldId = async (jira) => {
 };
 
 export const buildStandup = async (jira, config, { lookbackHours, sprintId }) => {
-  const { clause: sprintClause, sprint, sprints } = await resolveSprintClause(jira, config, sprintId);
+  const { clause: sprintClause, sprint, sprints, boardId } = await resolveSprintClause(jira, config, sprintId);
   const storyPointsFieldId = await findStoryPointsFieldId(jira);
 
   const jql = buildJql(config, sprintClause);
@@ -350,6 +369,7 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
     jql,
     sprint,
     sprints,
+    boardId,
     lookbackHours,
     jiraBaseUrl: jira.baseUrl,
     issues,

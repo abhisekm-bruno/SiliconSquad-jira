@@ -15,21 +15,6 @@
 
       <div class="topbar__controls">
         <label class="control">
-          <span>Sprint</span>
-          <select id="sprint" class="control__select control__select--wide"></select>
-        </label>
-
-        <label class="control">
-          <span>Developer</span>
-          <select id="developer" class="control__select"></select>
-        </label>
-
-        <label class="control">
-          <span>QA</span>
-          <select id="qa" class="control__select"></select>
-        </label>
-
-        <label class="control">
           <span>Since</span>
           <select id="lookback" class="control__select">
             <option value="24">Yesterday</option>
@@ -38,10 +23,26 @@
             <option value="168">1 week</option>
           </select>
         </label>
-
         <button id="refresh" class="button button--primary" type="button">Refresh</button>
       </div>
     </header>
+
+    <section class="pickers">
+      <label class="picker picker--primary">
+        <span class="picker__label">Sprint</span>
+        <select id="sprint" class="picker__select picker__select--primary"></select>
+      </label>
+
+      <label class="picker">
+        <span class="picker__label">Developer</span>
+        <select id="developer" class="picker__select"></select>
+      </label>
+
+      <label class="picker">
+        <span class="picker__label">QA</span>
+        <select id="qa" class="picker__select"></select>
+      </label>
+    </section>
 
     <nav class="tabs" id="tabs">
       <button class="tab tab--active" data-view="standup" type="button">Standup</button>
