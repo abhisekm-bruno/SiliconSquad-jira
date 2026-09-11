@@ -1,0 +1,34 @@
+{
+  "team": {
+    "name": "Silicon Squad",
+    "members": [
+      { "name": "Abhisek M", "accountId": "", "email": "abhisek.mohan@usebruno.com" },
+      { "name": "Teammate Two", "accountId": "", "email": "" },
+      { "name": "Teammate Three", "accountId": "", "email": "" }
+    ]
+  },
+
+  "projectKey": "SIL",
+  "boardId": null,
+  "sprintScope": "active",
+
+  "workflow": {
+    "todo": ["To Do", "Backlog", "Open", "Selected for Development"],
+    "inProgress": ["In Progress", "In Development"],
+    "inReview": ["In Review", "Code Review", "Peer Review"],
+    "qa": ["QA", "In QA", "Ready for QA", "Testing"],
+    "done": ["Done", "Closed", "Released"]
+  },
+
+  "thresholds": {
+    "staleInProgressDays": 3,
+    "staleInReviewDays": 2,
+    "staleInQaDays": 2,
+    "stalePrDays": 2
+  },
+
+  "doneLookbackDays": 14,
+  "defaultLookbackHours": 24,
+  "devStatusApplicationTypes": ["GitHub"],
+  "extraJql": ""
+}

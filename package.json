@@ -1,0 +1,14 @@
+{
+  "name": "jira-standup",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standup dashboard for a single team's Jira board: developer work, PR state, QA handover and Done transitions.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "discover": "node scripts/discover.js"
+  }
+}
