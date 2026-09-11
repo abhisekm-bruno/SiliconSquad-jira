@@ -16,6 +16,7 @@ const state = {
   sprintId: '',
   developer: ALL,
   qa: ALL,
+  lane: null,
   data: null,
   error: null
 };
@@ -62,6 +63,13 @@ const shortTitle = (summary, limit = 68) =>
 
 /* ---------- filtering ---------- */
 
+const matchesPeople = (issue) => {
+  const developerId = issue.assignee?.accountId || 'unassigned';
+  if (state.developer !== ALL && developerId !== state.developer) return false;
+  if (state.qa !== ALL && (issue.qaOwner?.name || 'unassigned') !== state.qa) return false;
+  return true;
+};
+
 const visibleIssues = () => {
   if (!state.data) return [];
 
@@ -69,6 +77,7 @@ const visibleIssues = () => {
     const developerId = issue.assignee?.accountId || 'unassigned';
     if (state.developer !== ALL && developerId !== state.developer) return false;
     if (state.qa !== ALL && (issue.qaOwner?.name || 'unassigned') !== state.qa) return false;
+    if (state.lane && issue.bucket !== state.lane) return false;
     return true;
   });
 };
@@ -324,6 +333,32 @@ const renderEmptyState = (data) => `
     <p>Run <code>npm run check</code> — it narrows the query one clause at a time and prints which one empties the board.</p>
   </div>`;
 
+/** Warns when the board is showing every team rather than just yours. */
+const renderTeamNotice = (data) => {
+  const { teamFilter } = data;
+  if (!teamFilter) return '';
+
+  if (!teamFilter.active) {
+    return `
+      <div class="notice notice--warn">
+        <strong>Showing every team on this project.</strong>
+        No team member could be resolved, so no assignee filter was applied. Add your teammates to
+        <code>team.members</code> in config.json — a <code>name</code> or <code>email</code> is enough,
+        the account id is looked up for you.
+      </div>`;
+  }
+
+  if (teamFilter.unresolved.length) {
+    return `
+      <div class="notice">
+        <strong>${teamFilter.resolved.length} of ${teamFilter.resolved.length + teamFilter.unresolved.length} team members matched.</strong>
+        No Jira user found for ${escapeHtml(teamFilter.unresolved.join(', '))} — check the spelling, or use their email.
+      </div>`;
+  }
+
+  return '';
+};
+
 /* ---------- selectors ---------- */
 
 const fillSelect = (select, options, selected) => {
@@ -397,12 +432,15 @@ const render = () => {
     `updated ${relativeTime(data.generatedAt)}`
   ].join(' · ');
 
+  const laneCounts = countBuckets(data.issues.filter(matchesPeople));
   elements.totals.innerHTML = LANE_ORDER.map(
     (bucket) => `
-    <div class="total-card" style="--lane: ${laneColor(bucket)}">
-      <div class="total-card__value">${totals[bucket]}</div>
-      <div class="total-card__label">${LANES[bucket].label}</div>
-    </div>`
+    <button type="button" class="lane-chip${state.lane === bucket ? ' lane-chip--active' : ''}"
+            data-lane="${bucket}" style="--lane: ${laneColor(bucket)}"
+            title="${state.lane === bucket ? 'Click to clear this filter' : `Show only ${LANES[bucket].label}`}">
+      <span class="lane-chip__value">${laneCounts[bucket]}</span>
+      <span class="lane-chip__label">${LANES[bucket].label}</span>
+    </button>`
   ).join('');
 
   const flagged = issues.filter((issue) => issue.flags.some((flag) => flag.severity === 'high')).length;
@@ -414,8 +452,11 @@ const render = () => {
     return;
   }
 
+  const notice = renderTeamNotice(data);
   const views = { standup: renderStandup, board: renderBoard, activity: renderActivity, attention: renderAttention };
-  elements.view.innerHTML = views[state.view]();
+  elements.view.innerHTML = notice + views[state.view]();
+  return;
+
 };
 
 /* ---------- data ---------- */
@@ -488,6 +529,14 @@ elements.developer.addEventListener('change', () => {
 
 elements.qa.addEventListener('change', () => {
   state.qa = elements.qa.value;
+  render();
+});
+
+elements.totals.addEventListener('click', (event) => {
+  const chip = event.target.closest('.lane-chip');
+  if (!chip) return;
+
+  state.lane = state.lane === chip.dataset.lane ? null : chip.dataset.lane;
   render();
 });
 

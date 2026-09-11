@@ -87,7 +87,9 @@ Open <http://localhost:5123>. Each view is bookmarkable — `#activity` opens st
 {
   "team": {
     "name": "Silicon Squad",
-    "members": [{ "name": "Abhisek M", "accountId": "5f8a…" }]   // accountId is what filters the board
+    // A name or email is enough — the accountId is looked up for you.
+    // Pin an explicit "accountId" only if two people share a display name.
+    "members": [{ "name": "Abhisek M" }, { "email": "riya@yourcompany.com" }]
   },
 
   "projectKey": "SIL",
@@ -196,5 +198,6 @@ their account IDs) and every status name in use — the two things `config.json`
 **"No active sprint".** Either the board has no sprint running, or `boardId` is unset. Pick a
 sprint from the dropdown, or set `"sprintScope": "none"` to show the whole project.
 
-**Everyone's tickets show, not just my team.** `team.members[].accountId` is empty. Without
-account IDs there is no assignee filter at all.
+**Everyone's tickets show, not just my team.** `team.members` is empty, or none of the names
+matched a Jira user. The board says so in a banner at the top, and names it can't resolve. A
+`name` or `email` per member is enough — account IDs are looked up automatically.

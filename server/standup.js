@@ -214,14 +214,64 @@ const computeFlags = (issue, thresholds) => {
   return flags;
 };
 
+/**
+ * Account IDs are the only thing Jira will filter assignees by, but nobody
+ * knows theirs. So a member may be listed by email or name and we look the
+ * account ID up once per process.
+ */
+const memberCache = new Map();
+
+export const resolveTeamMembers = async (jira, config) => {
+  const resolved = [];
+  const unresolved = [];
+
+  for (const member of config.team.members) {
+    if (member.accountId) {
+      resolved.push({ ...member });
+      continue;
+    }
+
+    const query = member.email || member.name;
+    if (!query) continue;
+
+    if (memberCache.has(query)) {
+      const cached = memberCache.get(query);
+      if (cached) resolved.push({ ...member, accountId: cached.accountId, name: member.name || cached.displayName });
+      else unresolved.push(member.name || query);
+      continue;
+    }
+
+    let match = null;
+    try {
+      const candidates = await jira.findUsersByEmail(query);
+      const normalisedQuery = query.trim().toLowerCase();
+
+      match =
+        candidates.find((user) => (user.emailAddress || '').toLowerCase() === normalisedQuery) ||
+        candidates.find((user) => (user.displayName || '').toLowerCase() === normalisedQuery) ||
+        candidates.find((user) => user.accountType === 'atlassian') ||
+        candidates[0] ||
+        null;
+    } catch {
+      match = null;
+    }
+
+    memberCache.set(query, match);
+
+    if (match) resolved.push({ ...member, accountId: match.accountId, name: member.name || match.displayName });
+    else unresolved.push(member.name || query);
+  }
+
+  return { resolved, unresolved };
+};
+
 /** Builds the JQL that scopes the board down to this one team. */
-export const buildJql = (config, sprintClause) => {
+export const buildJql = (config, sprintClause, accountIds = []) => {
   const clauses = [];
 
   if (config.projectKey) clauses.push(`project = "${config.projectKey}"`);
   if (sprintClause) clauses.push(sprintClause);
 
-  const accountIds = config.team.members.map((member) => member.accountId).filter(Boolean);
   if (accountIds.length) {
     clauses.push(`assignee in (${accountIds.map((id) => `"${id}"`).join(', ')})`);
   }
@@ -293,7 +343,9 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
   const { clause: sprintClause, sprint, sprints, boardId } = await resolveSprintClause(jira, config, sprintId);
   const storyPointsFieldId = await findStoryPointsFieldId(jira);
 
-  const jql = buildJql(config, sprintClause);
+  const { resolved: teamMembers, unresolved } = await resolveTeamMembers(jira, config);
+  const accountIds = teamMembers.map((member) => member.accountId).filter(Boolean);
+  const jql = buildJql(config, sprintClause, accountIds);
   const fields = [
     'summary',
     'status',
@@ -370,10 +422,15 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
     sprint,
     sprints,
     boardId,
+    teamFilter: {
+      active: accountIds.length > 0,
+      resolved: teamMembers.map((member) => ({ name: member.name, accountId: member.accountId })),
+      unresolved
+    },
     lookbackHours,
     jiraBaseUrl: jira.baseUrl,
     issues,
-    developers: groupByDeveloper(issues, config),
+    developers: groupByDeveloper(issues, teamMembers),
     columns: groupByBucket(issues),
     activity: recentActivity(issues, config, lookbackHours),
     attention: issues.filter((issue) => issue.flags.some((flag) => flag.severity === 'high')),
@@ -393,12 +450,12 @@ const groupByBucket = (issues) =>
     issues: issues.filter((issue) => issue.bucket === bucket)
   }));
 
-const groupByDeveloper = (issues, config) => {
+const groupByDeveloper = (issues, teamMembers) => {
   const byAccountId = new Map();
 
-  // Seed from config so a developer with nothing assigned still shows up — an
-  // empty column is itself a standup talking point.
-  for (const member of config.team.members) {
+  // Seed from the team list so a developer with nothing assigned still shows
+  // up — an empty column is itself a standup talking point.
+  for (const member of teamMembers) {
     if (!member.accountId) continue;
     byAccountId.set(member.accountId, {
       accountId: member.accountId,
