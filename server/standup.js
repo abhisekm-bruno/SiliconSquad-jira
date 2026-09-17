@@ -329,6 +329,14 @@ const resolveSprintClause = async (jira, config, requestedSprintId) => {
   return { clause: `sprint = ${active.id}`, sprint: active, sprints, boardId };
 };
 
+/** The team field comes back as a string, an object, or a list of either. */
+const readTeamName = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string') return value.trim() || null;
+  if (Array.isArray(value)) return readTeamName(value[0]);
+  return value.name || value.title || value.value || value.displayName || null;
+};
+
 let fieldCache = null;
 
 const jiraFields = async (jira) => {
@@ -346,30 +354,48 @@ const findStoryPointsFieldId = async (jira) => {
   return fields.find((field) => /story point/i.test(field.name || ''))?.id || null;
 };
 
-/** Jira's Team field, when the site has one — that is what groups the 5 teams. */
-const findTeamFieldId = async (jira, config) => {
-  if (config.teamFieldId) return config.teamFieldId;
-
+/**
+ * Sites name the team field all sorts of things — "Team", "Team Assignment",
+ * "Scrum Team" — and often carry several of them with only one filled in. So
+ * collect every candidate and let the data decide which is real.
+ */
+const findTeamFieldCandidates = async (jira, config) => {
   const fields = await jiraFields(jira);
-  return (
-    fields.find((field) => /^team$/i.test((field.name || '').trim()))?.id ||
-    fields.find((field) => /\bteam\b/i.test(field.name || ''))?.id ||
-    null
-  );
+
+  if (config.teamFieldId) {
+    const pinned = fields.find((field) => field.id === config.teamFieldId);
+    return [pinned || { id: config.teamFieldId, name: config.teamFieldId }];
+  }
+
+  if (config.teamFieldName) {
+    const wanted = config.teamFieldName.trim().toLowerCase();
+    const named = fields.filter((field) => (field.name || '').trim().toLowerCase() === wanted);
+    if (named.length) return named.map((field) => ({ id: field.id, name: field.name }));
+  }
+
+  return fields
+    .filter((field) => /\bteams?\b/i.test(field.name || ''))
+    .map((field) => ({ id: field.id, name: field.name }))
+    // An exact "Team" is the likeliest, so try it before "Team Assignment" etc.
+    .sort((a, b) => Number(/^team$/i.test(b.name.trim())) - Number(/^team$/i.test(a.name.trim())));
 };
 
-/** The Team field comes back as a string, an object, or a list of either. */
-const readTeamName = (value) => {
-  if (!value) return null;
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return readTeamName(value[0]);
-  return value.name || value.title || value.value || value.displayName || null;
+/** Of the candidates, the one actually populated on these tickets wins. */
+const pickTeamField = (candidates, rawIssues) => {
+  let best = null;
+
+  for (const candidate of candidates) {
+    const populated = rawIssues.filter((issue) => readTeamName(issue.fields[candidate.id])).length;
+    if (populated > (best?.populated ?? 0)) best = { ...candidate, populated };
+  }
+
+  return best;
 };
 
 export const buildStandup = async (jira, config, { lookbackHours, sprintId }) => {
   const { clause: sprintClause, sprint, sprints, boardId } = await resolveSprintClause(jira, config, sprintId);
   const storyPointsFieldId = await findStoryPointsFieldId(jira);
-  const teamFieldId = await findTeamFieldId(jira, config);
+  const teamCandidates = await findTeamFieldCandidates(jira, config);
 
   const { resolved: teamMembers, unresolved } = await resolveTeamMembers(jira, config);
   const accountIds = teamMembers.map((member) => member.accountId).filter(Boolean);
@@ -388,11 +414,12 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
     'timeoriginalestimate',
     'timeestimate',
     ...(storyPointsFieldId ? [storyPointsFieldId] : []),
-    ...(teamFieldId ? [teamFieldId] : []),
+    ...teamCandidates.map((candidate) => candidate.id),
     ...(config.qaFieldId ? [config.qaFieldId] : [])
   ];
 
   const rawIssues = await jira.search(jql, { fields });
+  const teamField = pickTeamField(teamCandidates, rawIssues);
 
   const issues = await mapWithConcurrency(rawIssues, 5, async (raw) => {
     const [histories, pullRequests] = await Promise.all([
@@ -418,7 +445,7 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
       bucket,
       labels,
       storyPoints: storyPointsFieldId ? raw.fields[storyPointsFieldId] ?? null : null,
-      jiraTeam: teamFieldId ? readTeamName(raw.fields[teamFieldId]) : null,
+      jiraTeam: teamField ? readTeamName(raw.fields[teamField.id]) : null,
       dueDate: raw.fields.duedate || null,
       parentKey: raw.fields.parent?.key || null,
       updated: raw.fields.updated,
@@ -451,7 +478,9 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
     generatedAt: new Date().toISOString(),
     team: config.team.name,
     teams,
-    teamFieldFound: Boolean(teamFieldId),
+    teamFieldFound: Boolean(teamField),
+    teamFieldName: teamField?.name || null,
+    teamFieldCandidates: teamCandidates.map((candidate) => candidate.name),
     defaultJiraTeam: config.team.jiraTeam || null,
     jql,
     sprint,

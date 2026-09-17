@@ -382,9 +382,19 @@ const renderTeamNotice = (data) => {
   if (data.teams?.length) {
     return `
       <div class="notice">
-        <strong>Showing all ${data.teams.length} teams.</strong>
-        Pick yours from the Team dropdown, or set <code>"jiraTeam": "Silicon Squad"</code> under
+        <strong>Showing all ${data.teams.length} teams</strong>, read from <code>${escapeHtml(data.teamFieldName)}</code>.
+        Pick yours from the dropdown, or set <code>"jiraTeam": "${escapeHtml(data.teams[0])}"</code> under
         <code>team</code> in config.json so it opens there every morning.
+      </div>`;
+  }
+
+  if (data.teamFieldCandidates?.length) {
+    return `
+      <div class="notice notice--warn">
+        <strong>No team is set on these tickets.</strong>
+        Found ${data.teamFieldCandidates.length} team-ish field(s) — ${escapeHtml(data.teamFieldCandidates.join(', '))} —
+        but none carried a value. Pin the right one with <code>"teamFieldName": "Team Assignment"</code> in config.json,
+        or run <code>npm run check</code> to see what each one holds.
       </div>`;
   }
 
@@ -434,10 +444,14 @@ const syncSelectors = (data) => {
         value: team,
         label: `${team} (${data.issues.filter((issue) => issue.jiraTeam === team).length})`
       }))]
-    : [{ value: ALL, label: data.teamFieldFound ? 'No team set on these tickets' : 'No Team field on this site' }];
+    : [{ value: ALL, label: data.teamFieldCandidates?.length ? 'No team set on these tickets' : 'No team field on this site' }];
 
   fillSelect(elements.team, teamOptions, state.team);
   elements.team.disabled = !data.teams?.length;
+
+  // Name the actual field, so it's obvious which one the board is reading.
+  const teamLabel = document.querySelector('#team')?.closest('.picker')?.querySelector('.picker__label');
+  if (teamLabel) teamLabel.textContent = data.teamFieldName || 'Team';
 
   const scoped = teamIssues();
   const developers = [

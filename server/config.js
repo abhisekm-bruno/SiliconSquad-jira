@@ -55,6 +55,7 @@ const DEFAULTS = {
   devStatusApplicationTypes: ['GitHub'],
   qaFieldId: null,
   teamFieldId: null,
+  teamFieldName: null,
   estimate: { hoursPerDay: 8, pointsToDays: 1 },
   extraJql: ''
 };

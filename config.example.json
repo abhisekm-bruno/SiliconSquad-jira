@@ -46,5 +46,6 @@
   "devStatusApplicationTypes": [
     "GitHub"
   ],
-  "extraJql": ""
+  "extraJql": "",
+  "teamFieldName": null
 }

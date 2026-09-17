@@ -91,6 +91,31 @@ const run = async () => {
       console.log(`  ${String(total).padStart(4)}  ${who}`);
     }
 
+    console.log('\nTeam-ish fields and what they actually hold:\n');
+    const allFields = await jira.fields();
+    const teamFields = allFields.filter((field) => /\bteams?\b/i.test(field.name || ''));
+
+    if (!teamFields.length) {
+      console.log('  (no field with "team" in its name — scope by team.members instead)');
+    } else {
+      const sample = await jira.search(project, {
+        fields: teamFields.map((field) => field.id),
+        maxIssues: 100
+      });
+
+      for (const field of teamFields) {
+        const values = new Set();
+        for (const issue of sample) {
+          const raw = issue.fields[field.id];
+          const name =
+            typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0]?.name : raw?.name || raw?.title || raw?.value;
+          if (name) values.add(name);
+        }
+        console.log(`  ${(field.name || '').padEnd(24)} ${field.id.padEnd(22)} ${values.size ? [...values].join(', ') : '(empty on every sampled issue)'}`);
+      }
+      console.log('\n  Put the populated one in config.json as "teamFieldName", and your team as team.jiraTeam.');
+    }
+
     console.log('\nStatus names in use (copy these into "workflow"):\n');
     const statuses = new Set(issues.map((issue) => issue.fields.status?.name).filter(Boolean));
     for (const status of statuses) console.log(`  ${status}`);

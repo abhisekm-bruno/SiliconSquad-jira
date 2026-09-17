@@ -9,16 +9,23 @@ standup. It answers, at a glance:
 - What changed since yesterday's standup?
 - What needs attention before anyone leaves the call?
 
-Your Jira has 5 teams; this scopes the board to yours. It reads Jira's own **Team** field, so
-picking "Silicon Squad" from the Team dropdown filters the tickets, the developer list and the
-QA list in one go. Name the team in `config.json` and it opens there every morning:
+Your Jira has 5 teams; this scopes the board to yours by reading whichever field your site uses
+to assign tickets to a team — `Team`, `Team Assignment`, `Scrum Team`, whatever it's called.
+Picking "Silicon Squad" from that dropdown filters the tickets, the developer list and the QA
+list in one go.
+
+Sites often carry several team-ish fields with only one filled in, so the app checks every
+candidate against the tickets it fetched and uses the one that actually holds values — the
+dropdown is labelled with the field it chose. Pin it explicitly if you'd rather not rely on that:
 
 ```json
+"teamFieldName": "Team Assignment",
 "team": { "name": "Silicon Squad", "jiraTeam": "Silicon Squad" }
 ```
 
-If your site has no Team field, fall back to listing people under `team.members` — a name or
-email each, account IDs are looked up for you.
+`npm run check` prints every team-ish field with the values it holds. If your site has no such
+field, fall back to listing people under `team.members` — a name or email each, account IDs are
+looked up for you.
 
 ## Why it looks like this
 
