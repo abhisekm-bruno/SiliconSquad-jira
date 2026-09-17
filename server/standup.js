@@ -85,18 +85,34 @@ const buildTimeline = (transitions, workflow, issueCreated, currentStatus) => {
 };
 
 /**
+ * Roster names are written the short way people say them ("Shivang"), while
+ * Jira stores the full display name, so either may be the prefix of the other.
+ */
+const matchesRoster = (name, roster) => {
+  if (!roster.length) return true;
+
+  const actor = normalise(name);
+  return roster.some((member) => {
+    const candidate = normalise(member);
+    return actor === candidate || actor.startsWith(candidate) || candidate.startsWith(actor);
+  });
+};
+
+/**
  * Who is QA on this ticket. Jira has no standard field for it, so unless the
  * project has one configured we infer it from the changelog: the person who
- * moved the ticket *out of* a QA status is the one who tested it.
+ * moved the ticket *out of* a QA status is the one who tested it. With a QA
+ * roster configured, only those people count — a developer moving their own
+ * ticket along is not a QA sign-off.
  */
-const deriveQaOwner = (transitions, workflow, qaFieldValue) => {
+const deriveQaOwner = (transitions, workflow, qaFieldValue, qaEngineers = []) => {
   if (qaFieldValue?.displayName) {
     return { name: qaFieldValue.displayName, accountId: qaFieldValue.accountId || null, source: 'field' };
   }
 
   const outOfQa = [...transitions]
     .reverse()
-    .find((transition) => isInBucket(workflow, 'qa', transition.from));
+    .find((transition) => isInBucket(workflow, 'qa', transition.from) && matchesRoster(transition.by, qaEngineers));
 
   if (outOfQa) {
     return { name: outOfQa.by, accountId: outOfQa.byAccountId, source: 'transition' };
@@ -460,7 +476,12 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
       pullRequests: pullRequests.map(summarisePullRequest),
       transitions,
       timeline: buildTimeline(transitions, config.workflow, raw.fields.created, statusName),
-      qaOwner: deriveQaOwner(transitions, config.workflow, config.qaFieldId ? raw.fields[config.qaFieldId] : null),
+      qaOwner: deriveQaOwner(
+        transitions,
+        config.workflow,
+        config.qaFieldId ? raw.fields[config.qaFieldId] : null,
+        config.qaEngineers
+      ),
       activeDays: activeDays(transitions, config.workflow, raw.fields.created)
     };
 
@@ -478,6 +499,7 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
     generatedAt: new Date().toISOString(),
     team: config.team.name,
     teams,
+    qaEngineers: config.qaEngineers,
     teamFieldFound: Boolean(teamField),
     teamFieldName: teamField?.name || null,
     teamFieldCandidates: teamCandidates.map((candidate) => candidate.name),

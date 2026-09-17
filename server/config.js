@@ -54,6 +54,7 @@ const DEFAULTS = {
   defaultLookbackHours: 24,
   devStatusApplicationTypes: ['GitHub'],
   qaFieldId: null,
+  qaEngineers: [],
   teamFieldId: null,
   teamFieldName: null,
   estimate: { hoursPerDay: 8, pointsToDays: 1 },

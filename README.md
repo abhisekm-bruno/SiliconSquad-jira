@@ -165,6 +165,19 @@ Jira has no standard "QA engineer" field, so the app infers it: **the person who
 ticket out of a QA status** is the one who tested it. That is who signed it off to Done, or who
 bounced it back. A ticket sitting in QA that nobody has touched yet shows *picking up*.
 
+List your QA engineers and only they can appear in that column — a developer moving their own
+ticket along stops counting as a sign-off:
+
+```json
+"qaEngineers": ["Abhisek M", "Abhisek Devgan", "Shivang"]
+```
+
+Write the names the short way people say them. Jira stores the full display name, and either
+may be the prefix of the other, so `Shivang` matches *Shivang Agarwal* and `Abhisek M` matches
+*Abhisek Mohan* without matching *Abhisek Devgan*. Everyone on the list appears in the QA
+dropdown with a ticket count, including anyone who hasn't signed anything off yet. Leave the
+list empty to credit whoever actually moved the ticket.
+
 If your project does have a QA field, set `qaFieldId` to its custom field id and that wins over
 the inference. `npm run discover` does not print field ids; get them from
 `/rest/api/3/field` on your site, or ask your Jira admin.

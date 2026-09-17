@@ -4,6 +4,11 @@
     "jiraTeam": "Silicon Squad",
     "members": []
   },
+  "qaEngineers": [
+    "Abhisek M",
+    "Abhisek Devgan",
+    "Shivang"
+  ],
   "projectKey": "SIL",
   "boardId": null,
   "sprintScope": "active",

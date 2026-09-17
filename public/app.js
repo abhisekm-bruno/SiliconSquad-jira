@@ -93,7 +93,10 @@ const teamIssues = () => {
 const matchesPeople = (issue) => {
   const developerId = issue.assignee?.accountId || 'unassigned';
   if (state.developer !== ALL && developerId !== state.developer) return false;
-  if (state.qa !== ALL && (issue.qaOwner?.name || 'unassigned') !== state.qa) return false;
+  if (state.qa !== ALL) {
+    const owner = (issue.qaOwner?.name || '').toLowerCase();
+    if (!owner.startsWith(state.qa.toLowerCase())) return false;
+  }
   return true;
 };
 
@@ -132,7 +135,21 @@ const developersInScope = () => {
   });
 };
 
-const qaInScope = () => [...new Set(teamIssues().map((issue) => issue.qaOwner?.name).filter(Boolean))].sort();
+const qaInScope = () => {
+  const found = teamIssues().map((issue) => issue.qaOwner?.name).filter(Boolean);
+  const roster = state.data?.qaEngineers || [];
+
+  // Show every QA on the roster, so the lead can pick one that has nothing yet.
+  const names = roster.length
+    ? [...roster, ...found.filter((name) => !roster.some((member) => name.toLowerCase().startsWith(member.toLowerCase())))]
+    : found;
+
+  return [...new Set(names)].sort();
+};
+
+/** Ticket counts per QA, for the dropdown labels. */
+const qaCount = (name) =>
+  teamIssues().filter((issue) => (issue.qaOwner?.name || '').toLowerCase().startsWith(name.toLowerCase())).length;
 
 const countBuckets = (issues) =>
   LANE_ORDER.reduce((totals, bucket) => ({ ...totals, [bucket]: issues.filter((i) => i.bucket === bucket).length }), {
@@ -482,7 +499,7 @@ const syncSelectors = (data) => {
 
   fillSelect(
     elements.qa,
-    [{ value: ALL, label: 'All QA' }, ...qaInScope().map((name) => ({ value: name, label: name }))],
+    [{ value: ALL, label: 'All QA' }, ...qaInScope().map((name) => ({ value: name, label: `${name} (${qaCount(name)})` }))],
     state.qa
   );
 };
