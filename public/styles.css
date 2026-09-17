@@ -1001,3 +1001,8 @@ select,
   font-size: 15px;
   font-weight: 450;
 }
+
+/* The combined people picker holds two groups, so give it room. */
+.picker__select--people {
+  min-width: 230px;
+}

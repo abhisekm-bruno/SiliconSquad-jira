@@ -32,8 +32,7 @@ const state = {
   lookbackHours: 24,
   sprintId: '',
   team: ALL,
-  developer: ALL,
-  qa: ALL,
+  person: ALL,
   lane: null,
   data: null,
   error: null
@@ -44,8 +43,7 @@ const elements = {
   boardMeta: document.getElementById('board-meta'),
   team: document.getElementById('team'),
   sprint: document.getElementById('sprint'),
-  developer: document.getElementById('developer'),
-  qa: document.getElementById('qa'),
+  person: document.getElementById('person'),
   lookback: document.getElementById('lookback'),
   refresh: document.getElementById('refresh'),
   theme: document.getElementById('theme'),
@@ -91,13 +89,18 @@ const teamIssues = () => {
   return state.data.issues.filter((issue) => issue.jiraTeam === state.team);
 };
 
+/**
+ * One picker holds both roles, so the selected value carries which role it is:
+ * "dev:<accountId>" or "qa:<name>".
+ */
 const matchesPeople = (issue) => {
-  const developerId = issue.assignee?.accountId || 'unassigned';
-  if (state.developer !== ALL && developerId !== state.developer) return false;
-  if (state.qa !== ALL) {
-    const owner = (issue.qaOwner?.name || '').toLowerCase();
-    if (!owner.startsWith(state.qa.toLowerCase())) return false;
-  }
+  if (state.person === ALL) return true;
+
+  const [role, ...rest] = state.person.split(':');
+  const value = rest.join(':');
+
+  if (role === 'dev') return (issue.assignee?.accountId || 'unassigned') === value;
+  if (role === 'qa') return (issue.qaOwner?.name || '').toLowerCase().startsWith(value.toLowerCase());
   return true;
 };
 
@@ -302,7 +305,7 @@ const renderStandup = () => {
   }
 
   // A single developer selected: one flat table, no redundant heading.
-  if (state.developer !== ALL) {
+  if (state.person !== ALL) {
     return `
       <div class="table-scroll">
         <table class="table">
@@ -431,16 +434,30 @@ const fillGroupedSelect = (select, groups, selected) => {
 };
 
 const syncSelectors = (data) => {
-  const sprintOptions = data.sprints?.length
-    ? data.sprints.map((sprint) => ({
-        value: sprint.id,
-        label: sprint.state === 'active' ? `${sprint.name}  ·  active` : `${sprint.name}  ·  ${sprint.state}`
-      }))
-    : [{ value: '', label: data.boardId ? 'No sprints on this board' : 'No board found for this project' }];
+  if (data.sprints?.length) {
+    const asOption = (sprint) => ({ value: sprint.id, label: sprint.name });
+    const inState = (wanted) => data.sprints.filter((sprint) => sprint.state === wanted).map(asOption);
+
+    // Grouped, because a flat list with a dozen backlog buckets in it is
+    // hard to pick a real sprint out of.
+    fillGroupedSelect(
+      elements.sprint,
+      [
+        { label: 'Current sprint', options: inState('active') },
+        { label: 'Upcoming', options: inState('future') },
+        { label: 'Finished', options: inState('closed') }
+      ],
+      state.sprintId || data.sprint?.id || ''
+    );
+  } else {
+    fillSelect(
+      elements.sprint,
+      [{ value: '', label: data.boardId ? 'No sprints on this board' : 'No board found for this project' }],
+      ''
+    );
+  }
 
   elements.sprint.disabled = !data.sprints?.length;
-
-  fillSelect(elements.sprint, sprintOptions, state.sprintId || data.sprint?.id || '');
 
   const teamOptions = data.teams?.length
     ? [{ value: ALL, label: `All teams (${data.issues.length})` }, ...data.teams.map((team) => ({
@@ -457,19 +474,24 @@ const syncSelectors = (data) => {
   if (teamLabel) teamLabel.textContent = data.teamFieldName || 'Team';
 
   const scoped = teamIssues();
-  const developers = [
-    { value: ALL, label: `All developers (${scoped.length})` },
-    ...developersInScope().map((developer) => ({
-      value: developer.accountId,
-      label: `${developer.name} (${developer.issues.length})`
-    }))
-  ];
-  fillSelect(elements.developer, developers, state.developer);
 
-  fillSelect(
-    elements.qa,
-    [{ value: ALL, label: 'All QA' }, ...qaInScope().map((name) => ({ value: name, label: `${name} (${qaCount(name)})` }))],
-    state.qa
+  fillGroupedSelect(
+    elements.person,
+    [
+      { label: 'Everyone', options: [{ value: ALL, label: `Everyone (${scoped.length})` }] },
+      {
+        label: 'Developers',
+        options: developersInScope().map((developer) => ({
+          value: `dev:${developer.accountId}`,
+          label: `${developer.name} (${developer.issues.length})`
+        }))
+      },
+      {
+        label: 'QA',
+        options: qaInScope().map((name) => ({ value: `qa:${name}`, label: `${name} (${qaCount(name)})` }))
+      }
+    ],
+    state.person
   );
 };
 
@@ -546,7 +568,7 @@ const remember = () => {
   try {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ team: state.team, sprintId: state.sprintId, developer: state.developer, qa: state.qa })
+      JSON.stringify({ team: state.team, sprintId: state.sprintId, person: state.person })
     );
   } catch {
     // A locked-down browser just means the picks don't persist; not worth failing over.
@@ -558,8 +580,7 @@ const recall = () => {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
     if (saved.team) state.team = saved.team;
     if (saved.sprintId) state.sprintId = saved.sprintId;
-    if (saved.developer) state.developer = saved.developer;
-    if (saved.qa) state.qa = saved.qa;
+    if (saved.person) state.person = saved.person;
   } catch {
     // Ignore anything unparseable and start from defaults.
   }
@@ -594,11 +615,15 @@ const load = async ({ force = false } = {}) => {
     }
     if (state.team !== ALL && !payload.teams?.includes(state.team)) state.team = ALL;
 
-    const developerIds = new Set([ALL, ...payload.issues.map((issue) => issue.assignee?.accountId || 'unassigned')]);
-    if (!developerIds.has(state.developer)) state.developer = ALL;
-
-    const qaNames = new Set([ALL, ...payload.issues.map((issue) => issue.qaOwner?.name).filter(Boolean)]);
-    if (!qaNames.has(state.qa)) state.qa = ALL;
+    // Someone with no tickets in the newly chosen sprint shouldn't leave the
+    // board looking empty.
+    const selectable = new Set([
+      ALL,
+      ...payload.issues.map((issue) => `dev:${issue.assignee?.accountId || 'unassigned'}`),
+      ...(payload.qaEngineers || []).map((name) => `qa:${name}`),
+      ...payload.issues.map((issue) => (issue.qaOwner ? `qa:${issue.qaOwner.name}` : null)).filter(Boolean)
+    ]);
+    if (!selectable.has(state.person)) state.person = ALL;
 
     syncSelectors(payload);
   } catch (error) {
@@ -652,8 +677,7 @@ window.addEventListener('hashchange', () => {
 
 elements.team.addEventListener('change', () => {
   state.team = elements.team.value;
-  state.developer = ALL;
-  state.qa = ALL;
+  state.person = ALL;
   remember();
   syncSelectors(state.data);
   render();
@@ -665,15 +689,9 @@ elements.sprint.addEventListener('change', () => {
   load();
 });
 
-// Developer and QA filter what is already loaded, so switching is instant.
-elements.developer.addEventListener('change', () => {
-  state.developer = elements.developer.value;
-  remember();
-  render();
-});
-
-elements.qa.addEventListener('change', () => {
-  state.qa = elements.qa.value;
+// The person picker filters what is already loaded, so switching is instant.
+elements.person.addEventListener('change', () => {
+  state.person = elements.person.value;
   remember();
   render();
 });
