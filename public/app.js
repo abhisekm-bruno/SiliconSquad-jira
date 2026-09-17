@@ -7,6 +7,23 @@ const LANES = {
 };
 
 const LANE_ORDER = Object.keys(LANES);
+
+const LOADING_MESSAGES = [
+  'Pretending this will be a short meeting…',
+  'Looking for tickets hiding in QA…',
+  'Asking Jira what everyone did yesterday…',
+  'Finding out who forgot to update their status…'
+];
+
+// Start somewhere random, then cycle, so you never get the same line twice running.
+let loadingCursor = Math.floor(Math.random() * LOADING_MESSAGES.length);
+let loadingMessage = LOADING_MESSAGES[loadingCursor];
+
+const nextLoadingMessage = () => {
+  loadingCursor = (loadingCursor + 1) % LOADING_MESSAGES.length;
+  loadingMessage = LOADING_MESSAGES[loadingCursor];
+  return loadingMessage;
+};
 const VIEWS = ['standup', 'board', 'activity', 'attention'];
 const ALL = '__all__';
 
@@ -491,7 +508,7 @@ const render = () => {
   }
 
   if (!state.data) {
-    elements.view.innerHTML = '<p class="placeholder">Loading the board…</p>';
+    elements.view.innerHTML = `<p class="placeholder">${escapeHtml(loadingMessage)}</p>`;
     return;
   }
 
@@ -568,6 +585,8 @@ const load = async ({ force = false } = {}) => {
   state.error = null;
   elements.refresh.disabled = true;
   elements.refresh.textContent = 'Loading…';
+
+  if (!state.data) elements.view.innerHTML = `<p class="placeholder">${escapeHtml(nextLoadingMessage())}</p>`;
 
   try {
     const params = new URLSearchParams({ lookbackHours: state.lookbackHours, refresh: String(force) });
