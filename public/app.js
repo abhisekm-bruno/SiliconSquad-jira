@@ -422,6 +422,15 @@ const renderTeamNotice = (data) => {
       </div>`;
   }
 
+  if (!data.qaEngineers?.length) {
+    return `
+      <div class="notice">
+        <strong>QA column is showing whoever moved each ticket</strong>, which includes developers.
+        Add a top-level <code>"qaEngineers": ["Abhisek M", "Shivang"]</code> to config.json to restrict it
+        to your QA engineers.
+      </div>`;
+  }
+
   if (data.teamFieldCandidates?.length) {
     return `
       <div class="notice notice--warn">
