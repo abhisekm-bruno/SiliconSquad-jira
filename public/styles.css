@@ -520,10 +520,14 @@ select,
 
 /* ---------- PR column ---------- */
 
+/* A flex container is block-level, so several PRs stack instead of spilling
+   sideways into the next column. */
 .pr {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   gap: 1px;
+  width: fit-content;
+  max-width: 100%;
   padding: 3px 9px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -537,6 +541,17 @@ select,
 
 .pr + .pr {
   margin-top: 4px;
+}
+
+.pr__status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Nothing in a cell may bleed into its neighbour. */
+.table td {
+  overflow-wrap: anywhere;
 }
 
 .pr__idle {
@@ -677,7 +692,8 @@ select,
 }
 
 .col-pr {
-  width: 116px;
+  width: 136px;
+  white-space: normal;
 }
 
 .col-status {
