@@ -51,13 +51,12 @@ body {
   padding: 0 0 48px;
   background: var(--bg);
   color: var(--text);
-  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  font-size: 14px;
+  font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /* Source Sans runs a touch small, so nudge the base size up. */
+  font-size: 14.5px;
   line-height: 1.5;
-  font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  letter-spacing: -0.006em;
 }
 
 /* Counts and ages line up column to column when the digits are fixed width. */
@@ -85,9 +84,9 @@ body {
 
 .topbar h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 600;
-  letter-spacing: -0.021em;
+  letter-spacing: -0.008em;
 }
 
 .topbar__meta {
@@ -353,9 +352,9 @@ select,
 }
 
 .dev-block__name {
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 600;
-  letter-spacing: -0.014em;
+  letter-spacing: -0.004em;
 }
 
 .dev-block__pills {
@@ -430,7 +429,7 @@ select,
 
 .col-key a {
   color: var(--accent);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12.5px;
   font-weight: 600;
   text-decoration: none;
@@ -598,7 +597,7 @@ select,
 
 .card__key {
   color: var(--accent);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   font-weight: 600;
   text-decoration: none;
@@ -750,8 +749,8 @@ select,
   padding: 13px 18px;
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   font-size: 19px;
-  font-weight: 550;
-  letter-spacing: -0.017em;
+  font-weight: 600;
+  letter-spacing: -0.005em;
 }
 
 .picker__select--primary:focus {
