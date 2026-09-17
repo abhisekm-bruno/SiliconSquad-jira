@@ -1,9 +1,33 @@
+/* Light and greyish by default; the toggle in the header opts into dark. */
 :root {
-  /* Neutral greys rather than navy — the blue was doing too much work. */
-  --bg: #15161a;
-  --surface: #1c1e22;
-  --surface-raised: #24262b;
-  --border: #303239;
+  /* Makes native controls — selects, scrollbars — follow the page, not the OS. */
+  color-scheme: light;
+
+  --bg: #f3f3f4;
+  --surface: #ffffff;
+  --surface-raised: #f7f7f8;
+  --border: #e3e3e6;
+  --text: #1f2024;
+  --text-dim: #6c6e75;
+  --accent: #55709c;
+
+  --todo: #83868d;
+  --in-progress: #5b7da8;
+  --in-review: #8672a8;
+  --done: #588a6c;
+  --qa: #a8813f;
+
+  --high: #b45c5c;
+  --medium: #a8813f;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #1a1b1f;
+  --surface: #212328;
+  --surface-raised: #292b31;
+  --border: #35373e;
   --text: #e9e9ec;
   --text-dim: #9a9ca4;
   --accent: #8ba7d8;
@@ -16,27 +40,6 @@
 
   --high: #cf8484;
   --medium: #c9a468;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f4f4f5;
-    --surface: #ffffff;
-    --surface-raised: #f6f6f7;
-    --border: #e2e2e5;
-    --text: #1c1d21;
-    --text-dim: #6c6e75;
-    --accent: #4f6b99;
-
-    --todo: #83868d;
-    --in-progress: #5b7da8;
-    --in-review: #8672a8;
-    --done: #588a6c;
-    --qa: #a8813f;
-
-    --high: #b45c5c;
-    --medium: #a8813f;
-  }
 }
 
 * {
@@ -838,4 +841,27 @@ select,
   border-radius: 4px;
   background: var(--surface-raised);
   font-size: 12px;
+}
+
+/* ---------- theme toggle ---------- */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--text);
 }

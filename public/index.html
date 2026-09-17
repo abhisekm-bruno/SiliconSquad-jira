@@ -11,6 +11,12 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap"
     />
     <link rel="stylesheet" href="/styles.css" />
+    <script>
+      try {
+        const stored = localStorage.getItem('standup-theme');
+        if (stored === 'dark') document.documentElement.dataset.theme = 'dark';
+      } catch {}
+    </script>
   </head>
   <body>
     <header class="topbar">
@@ -29,6 +35,7 @@
             <option value="168">1 week</option>
           </select>
         </label>
+        <button id="theme" class="theme-toggle" type="button" title="Switch to dark" aria-label="Switch theme">☾</button>
         <button id="refresh" class="button button--primary" type="button">Refresh</button>
       </div>
     </header>

@@ -48,6 +48,7 @@ const elements = {
   qa: document.getElementById('qa'),
   lookback: document.getElementById('lookback'),
   refresh: document.getElementById('refresh'),
+  theme: document.getElementById('theme'),
   tabs: document.getElementById('tabs'),
   attentionCount: document.getElementById('attention-count'),
   totals: document.getElementById('totals'),
@@ -650,6 +651,26 @@ const load = async ({ force = false } = {}) => {
   }
 };
 
+/* ---------- theme ---------- */
+
+const applyTheme = (theme) => {
+  if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
+  else delete document.documentElement.dataset.theme;
+
+  elements.theme.textContent = theme === 'dark' ? '☀' : '☾';
+  elements.theme.title = theme === 'dark' ? 'Switch to light' : 'Switch to dark';
+
+  try {
+    localStorage.setItem('standup-theme', theme);
+  } catch {
+    // Not persisting the theme is survivable.
+  }
+};
+
+elements.theme.addEventListener('click', () => {
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+});
+
 /* ---------- events ---------- */
 
 elements.tabs.addEventListener('click', (event) => {
@@ -714,5 +735,6 @@ elements.lookback.addEventListener('change', () => {
 elements.refresh.addEventListener('click', () => load({ force: true }));
 
 recall();
+applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
 syncTabs();
 load();
