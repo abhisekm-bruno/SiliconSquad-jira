@@ -172,9 +172,11 @@ ticket along stops counting as a sign-off:
 "qaEngineers": ["Abhisek M", "Abhisek Devgan", "Shivang"]
 ```
 
-Write the names the short way people say them. Jira stores the full display name, and either
-may be the prefix of the other, so `Shivang` matches *Shivang Agarwal* and `Abhisek M` matches
-*Abhisek Mohan* without matching *Abhisek Devgan*. Everyone on the list appears in the QA
+Names or emails, mixed freely. A name is matched the short way people say it: Jira stores the
+full display name and either may be the prefix of the other, so `Shivang` matches *Shivang
+Agarwal* and `Abhisek M` matches *Abhisek Mohan* without matching *Abhisek Devgan*. An email is
+resolved to that Jira account once and matched by account id, which is exact — worth using when
+two people share a first name. Everyone on the list appears in the QA
 dropdown with a ticket count, including anyone who hasn't signed anything off yet. Leave the
 list empty to credit whoever actually moved the ticket.
 

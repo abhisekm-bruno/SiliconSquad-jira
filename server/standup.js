@@ -87,15 +87,58 @@ const buildTimeline = (transitions, workflow, issueCreated, currentStatus) => {
 /**
  * Roster names are written the short way people say them ("Shivang"), while
  * Jira stores the full display name, so either may be the prefix of the other.
+ * An entry may also be an email, resolved to an account id up front — changelog
+ * entries carry no email, only a display name and an account id.
  */
-const matchesRoster = (name, roster) => {
-  if (!roster.length) return true;
+const matchesRoster = (transition, roster) => {
+  if (!roster.entries.length) return true;
 
-  const actor = normalise(name);
-  return roster.some((member) => {
-    const candidate = normalise(member);
-    return actor === candidate || actor.startsWith(candidate) || candidate.startsWith(actor);
-  });
+  if (transition.byAccountId && roster.accountIds.has(transition.byAccountId)) return true;
+
+  const actor = normalise(transition.by);
+  return roster.names.some(
+    (candidate) => actor === candidate || actor.startsWith(candidate) || candidate.startsWith(actor)
+  );
+};
+
+/** Splits the roster into plain names and emails, resolving the emails once. */
+const buildQaRoster = async (jira, qaEngineers = []) => {
+  const names = [];
+  const accountIds = new Set();
+
+  for (const entry of qaEngineers) {
+    if (!entry) continue;
+
+    if (!entry.includes('@')) {
+      names.push(normalise(entry));
+      continue;
+    }
+
+    if (memberCache.has(entry)) {
+      const cached = memberCache.get(entry);
+      if (cached) {
+        accountIds.add(cached.accountId);
+        names.push(normalise(cached.displayName));
+      }
+      continue;
+    }
+
+    let match = null;
+    try {
+      const candidates = await jira.findUsersByEmail(entry);
+      match = candidates.find((user) => (user.emailAddress || '').toLowerCase() === entry.toLowerCase()) || candidates[0] || null;
+    } catch {
+      match = null;
+    }
+
+    memberCache.set(entry, match);
+    if (match) {
+      accountIds.add(match.accountId);
+      names.push(normalise(match.displayName));
+    }
+  }
+
+  return { entries: qaEngineers.filter(Boolean), names, accountIds };
 };
 
 /**
@@ -105,14 +148,14 @@ const matchesRoster = (name, roster) => {
  * roster configured, only those people count — a developer moving their own
  * ticket along is not a QA sign-off.
  */
-const deriveQaOwner = (transitions, workflow, qaFieldValue, qaEngineers = []) => {
+const deriveQaOwner = (transitions, workflow, qaFieldValue, qaRoster) => {
   if (qaFieldValue?.displayName) {
     return { name: qaFieldValue.displayName, accountId: qaFieldValue.accountId || null, source: 'field' };
   }
 
   const outOfQa = [...transitions]
     .reverse()
-    .find((transition) => isInBucket(workflow, 'qa', transition.from) && matchesRoster(transition.by, qaEngineers));
+    .find((transition) => isInBucket(workflow, 'qa', transition.from) && matchesRoster(transition, qaRoster));
 
   if (outOfQa) {
     return { name: outOfQa.by, accountId: outOfQa.byAccountId, source: 'transition' };
@@ -235,8 +278,6 @@ const computeFlags = (issue, thresholds) => {
  * knows theirs. So a member may be listed by email or name and we look the
  * account ID up once per process.
  */
-const memberCache = new Map();
-
 export const resolveTeamMembers = async (jira, config) => {
   const resolved = [];
   const unresolved = [];
@@ -353,6 +394,9 @@ const readTeamName = (value) => {
   return value.name || value.title || value.value || value.displayName || null;
 };
 
+/** Jira user lookups are stable within a run, so resolve each query once. */
+const memberCache = new Map();
+
 let fieldCache = null;
 
 const jiraFields = async (jira) => {
@@ -414,6 +458,7 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
   const teamCandidates = await findTeamFieldCandidates(jira, config);
 
   const { resolved: teamMembers, unresolved } = await resolveTeamMembers(jira, config);
+  const qaRoster = await buildQaRoster(jira, config.qaEngineers);
   const accountIds = teamMembers.map((member) => member.accountId).filter(Boolean);
   const jql = buildJql(config, sprintClause, accountIds);
   const fields = [
@@ -480,7 +525,7 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
         transitions,
         config.workflow,
         config.qaFieldId ? raw.fields[config.qaFieldId] : null,
-        config.qaEngineers
+        qaRoster
       ),
       activeDays: activeDays(transitions, config.workflow, raw.fields.created)
     };
