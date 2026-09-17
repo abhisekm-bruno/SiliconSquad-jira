@@ -1,30 +1,41 @@
 :root {
-  --bg: #0e1117;
-  --surface: #161b24;
-  --surface-raised: #1d2430;
-  --border: #2a3240;
-  --text: #e6edf5;
-  --text-dim: #9aa7b8;
-  --accent: #4f8ef7;
+  /* Neutral greys rather than navy — the blue was doing too much work. */
+  --bg: #15161a;
+  --surface: #1c1e22;
+  --surface-raised: #24262b;
+  --border: #303239;
+  --text: #e9e9ec;
+  --text-dim: #9a9ca4;
+  --accent: #8ba7d8;
 
-  --todo: #7d8998;
-  --in-progress: #4f8ef7;
-  --in-review: #a978f0;
-  --qa: #e0a33e;
-  --done: #3fb27f;
+  --todo: #8b8e96;
+  --in-progress: #7fa0cc;
+  --in-review: #a894c9;
+  --done: #7cab8f;
+  --qa: #c9a468;
 
-  --high: #f2545b;
-  --medium: #e0a33e;
+  --high: #cf8484;
+  --medium: #c9a468;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f5f7fa;
+    --bg: #f4f4f5;
     --surface: #ffffff;
-    --surface-raised: #f0f3f7;
-    --border: #dde3ea;
-    --text: #16202c;
-    --text-dim: #5b6877;
+    --surface-raised: #f6f6f7;
+    --border: #e2e2e5;
+    --text: #1c1d21;
+    --text-dim: #6c6e75;
+    --accent: #4f6b99;
+
+    --todo: #83868d;
+    --in-progress: #5b7da8;
+    --in-review: #8672a8;
+    --done: #588a6c;
+    --qa: #a8813f;
+
+    --high: #b45c5c;
+    --medium: #a8813f;
   }
 }
 
@@ -37,7 +48,23 @@ body {
   padding: 0 0 48px;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.006em;
+}
+
+/* Counts and ages line up column to column when the digits are fixed width. */
+.lane-chip__value,
+.col-age,
+.col-est,
+.total-card__value,
+.column__count,
+.tab__count {
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- top bar ---------- */
@@ -56,8 +83,8 @@ body {
 .topbar h1 {
   margin: 0;
   font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.021em;
 }
 
 .topbar__meta {
@@ -93,10 +120,14 @@ select,
 }
 
 .button--primary {
-  border-color: transparent;
-  background: var(--accent);
-  color: #fff;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-raised));
+  color: var(--accent);
   font-weight: 550;
+}
+
+.button--primary:hover {
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface-raised));
 }
 
 .button:disabled {
@@ -320,7 +351,8 @@ select,
 
 .dev-block__name {
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 600;
+  letter-spacing: -0.014em;
 }
 
 .dev-block__pills {
@@ -697,9 +729,10 @@ select,
 .picker__select--primary {
   min-width: 320px;
   padding: 13px 18px;
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   font-size: 19px;
-  font-weight: 650;
+  font-weight: 550;
+  letter-spacing: -0.017em;
 }
 
 .picker__select--primary:focus {
