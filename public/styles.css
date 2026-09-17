@@ -632,7 +632,7 @@ select,
 }
 
 .col-person {
-  width: 118px;
+  width: 136px;
   overflow: hidden;
   text-overflow: ellipsis;
 }

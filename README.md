@@ -9,16 +9,28 @@ standup. It answers, at a glance:
 - What changed since yesterday's standup?
 - What needs attention before anyone leaves the call?
 
-Your Jira has 5 teams; this scopes the board to your team only, via an assignee filter built
-from the account IDs you list in `config.json`.
+Your Jira has 5 teams; this scopes the board to yours. It reads Jira's own **Team** field, so
+picking "Silicon Squad" from the Team dropdown filters the tickets, the developer list and the
+QA list in one go. Name the team in `config.json` and it opens there every morning:
+
+```json
+"team": { "name": "Silicon Squad", "jiraTeam": "Silicon Squad" }
+```
+
+If your site has no Team field, fall back to listing people under `team.members` — a name or
+email each, account IDs are looked up for you.
 
 ## Why it looks like this
 
 ### Running the call
 
-Along the top: **Sprint → Developer → QA**. The lead picks the sprint, then walks down the
-developer list; each developer's tickets appear as a table below. Changing sprint refetches;
-changing developer or QA filters what's already loaded, so it's instant mid-call.
+Along the top: **Team → Sprint → Developer → QA**, narrowing left to right. The lead picks the
+sprint, then walks down the developer list; each developer's tickets appear as a table below.
+Changing sprint refetches; team, developer and QA filter what's already loaded, so it's instant
+mid-call. The picks are remembered between sessions, so tomorrow it opens where you left it.
+
+The lane counts under the tabs are filters too — click **QA** to see only what's in QA.
+The **Est.** column hides itself on a board that tracks no estimates.
 
 Each ticket row is one line: **short title · developer · QA · estimate · PR · status · age**.
 The estimate is highlighted — blue while on track, **red once actual days exceed it**, with the

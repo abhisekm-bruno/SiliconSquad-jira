@@ -1,17 +1,8 @@
 {
   "team": {
     "name": "Silicon Squad",
-    "members": [
-      {
-        "name": "Abhisek M"
-      },
-      {
-        "email": "teammate.two@yourcompany.com"
-      },
-      {
-        "name": "Teammate Three"
-      }
-    ]
+    "jiraTeam": "Silicon Squad",
+    "members": []
   },
   "projectKey": "SIL",
   "boardId": null,

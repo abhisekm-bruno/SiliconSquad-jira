@@ -33,7 +33,7 @@ export const loadEnv = () => {
 };
 
 const DEFAULTS = {
-  team: { name: 'My Team', members: [] },
+  team: { name: 'My Team', jiraTeam: null, members: [] },
   projectKey: '',
   boardId: null,
   sprintScope: 'active',
@@ -54,6 +54,7 @@ const DEFAULTS = {
   defaultLookbackHours: 24,
   devStatusApplicationTypes: ['GitHub'],
   qaFieldId: null,
+  teamFieldId: null,
   estimate: { hoursPerDay: 8, pointsToDays: 1 },
   extraJql: ''
 };

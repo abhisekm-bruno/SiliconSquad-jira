@@ -14,6 +14,7 @@ const state = {
   view: VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'standup',
   lookbackHours: 24,
   sprintId: '',
+  team: ALL,
   developer: ALL,
   qa: ALL,
   lane: null,
@@ -24,6 +25,7 @@ const state = {
 const elements = {
   teamName: document.getElementById('team-name'),
   boardMeta: document.getElementById('board-meta'),
+  team: document.getElementById('team'),
   sprint: document.getElementById('sprint'),
   developer: document.getElementById('developer'),
   qa: document.getElementById('qa'),
@@ -63,6 +65,14 @@ const shortTitle = (summary, limit = 68) =>
 
 /* ---------- filtering ---------- */
 
+/** Everything the chosen team owns — the pool the people dropdowns come from. */
+const teamIssues = () => {
+  if (!state.data) return [];
+  if (state.team === ALL) return state.data.issues;
+
+  return state.data.issues.filter((issue) => issue.jiraTeam === state.team);
+};
+
 const matchesPeople = (issue) => {
   const developerId = issue.assignee?.accountId || 'unassigned';
   if (state.developer !== ALL && developerId !== state.developer) return false;
@@ -70,17 +80,42 @@ const matchesPeople = (issue) => {
   return true;
 };
 
-const visibleIssues = () => {
-  if (!state.data) return [];
-
-  return state.data.issues.filter((issue) => {
-    const developerId = issue.assignee?.accountId || 'unassigned';
-    if (state.developer !== ALL && developerId !== state.developer) return false;
-    if (state.qa !== ALL && (issue.qaOwner?.name || 'unassigned') !== state.qa) return false;
+const visibleIssues = () =>
+  teamIssues().filter((issue) => {
+    if (!matchesPeople(issue)) return false;
     if (state.lane && issue.bucket !== state.lane) return false;
     return true;
   });
+
+/** Developers with tickets in the current team, busiest first. */
+const developersInScope = () => {
+  const byAccountId = new Map();
+
+  for (const issue of teamIssues()) {
+    const accountId = issue.assignee?.accountId || 'unassigned';
+    if (!byAccountId.has(accountId)) {
+      byAccountId.set(accountId, { accountId, name: issue.assignee?.name || 'Unassigned', issues: [] });
+    }
+    byAccountId.get(accountId).issues.push(issue);
+  }
+
+  // Configured teammates with nothing assigned still deserve a turn in the call.
+  if (state.team === ALL) {
+    for (const member of state.data?.teamFilter?.resolved || []) {
+      if (!byAccountId.has(member.accountId)) {
+        byAccountId.set(member.accountId, { accountId: member.accountId, name: member.name, issues: [] });
+      }
+    }
+  }
+
+  return [...byAccountId.values()].sort((a, b) => {
+    if (a.accountId === 'unassigned') return 1;
+    if (b.accountId === 'unassigned') return -1;
+    return b.issues.length - a.issues.length;
+  });
 };
+
+const qaInScope = () => [...new Set(teamIssues().map((issue) => issue.qaOwner?.name).filter(Boolean))].sort();
 
 const countBuckets = (issues) =>
   LANE_ORDER.reduce((totals, bucket) => ({ ...totals, [bucket]: issues.filter((i) => i.bucket === bucket).length }), {
@@ -143,14 +178,17 @@ const renderFlags = (flags) =>
 
 /* ---------- the standup table ---------- */
 
-const TABLE_HEAD = `
+/** The Est. column is dead weight on a board that tracks no estimates. */
+let showEstimates = true;
+
+const tableHead = () => `
   <thead>
     <tr>
       <th class="col-key">Ticket</th>
       <th class="col-title">Title</th>
       <th class="col-person">Developer</th>
       <th class="col-person">QA</th>
-      <th class="col-est">Est.</th>
+      ${showEstimates ? '<th class="col-est">Est.</th>' : ''}
       <th class="col-pr">PR</th>
       <th class="col-status">Status</th>
       <th class="col-age">Age</th>
@@ -170,7 +208,7 @@ const renderRow = (issue) => `
       <span class="person${issue.assignee ? '' : ' person--none'}">${escapeHtml(issue.assignee?.name || 'Unassigned')}</span>
     </td>
     <td class="col-person">${renderQaCell(issue)}</td>
-    <td class="col-est">${renderEstimateCell(issue)}</td>
+    ${showEstimates ? `<td class="col-est">${renderEstimateCell(issue)}</td>` : ''}
     <td class="col-pr">${renderPullRequestCell(issue)}</td>
     <td class="col-status">
       <span class="status-pill" style="--lane: ${laneColor(issue.bucket)}">${escapeHtml(issue.status)}</span>
@@ -203,7 +241,7 @@ const renderDeveloperBlock = (developer) => {
       </header>
       <div class="table-scroll">
         <table class="table">
-          ${TABLE_HEAD}
+          ${tableHead()}
           <tbody>${developer.issues.map(renderRow).join('')}</tbody>
         </table>
       </div>
@@ -222,13 +260,13 @@ const renderStandup = () => {
     return `
       <div class="table-scroll">
         <table class="table">
-          ${TABLE_HEAD}
+          ${tableHead()}
           <tbody>${issues.map(renderRow).join('')}</tbody>
         </table>
       </div>`;
   }
 
-  const order = state.data.developers
+  const order = developersInScope()
     .map((developer) => ({
       ...developer,
       issues: issues.filter((issue) => (issue.assignee?.accountId || 'unassigned') === developer.accountId)
@@ -312,7 +350,7 @@ const renderAttention = () => {
   return `
     <div class="table-scroll">
       <table class="table">
-        ${TABLE_HEAD}
+        ${tableHead()}
         <tbody>${issues.map(renderRow).join('')}</tbody>
       </table>
     </div>`;
@@ -337,6 +375,18 @@ const renderEmptyState = (data) => `
 const renderTeamNotice = (data) => {
   const { teamFilter } = data;
   if (!teamFilter) return '';
+
+  // A Team picked from the dropdown already scopes the board.
+  if (state.team !== ALL) return '';
+
+  if (data.teams?.length) {
+    return `
+      <div class="notice">
+        <strong>Showing all ${data.teams.length} teams.</strong>
+        Pick yours from the Team dropdown, or set <code>"jiraTeam": "Silicon Squad"</code> under
+        <code>team</code> in config.json so it opens there every morning.
+      </div>`;
+  }
 
   if (!teamFilter.active) {
     return `
@@ -379,19 +429,29 @@ const syncSelectors = (data) => {
 
   fillSelect(elements.sprint, sprintOptions, state.sprintId || data.sprint?.id || '');
 
+  const teamOptions = data.teams?.length
+    ? [{ value: ALL, label: `All teams (${data.issues.length})` }, ...data.teams.map((team) => ({
+        value: team,
+        label: `${team} (${data.issues.filter((issue) => issue.jiraTeam === team).length})`
+      }))]
+    : [{ value: ALL, label: data.teamFieldFound ? 'No team set on these tickets' : 'No Team field on this site' }];
+
+  fillSelect(elements.team, teamOptions, state.team);
+  elements.team.disabled = !data.teams?.length;
+
+  const scoped = teamIssues();
   const developers = [
-    { value: ALL, label: `All developers (${data.issues.length})` },
-    ...data.developers.map((developer) => ({
+    { value: ALL, label: `All developers (${scoped.length})` },
+    ...developersInScope().map((developer) => ({
       value: developer.accountId,
       label: `${developer.name} (${developer.issues.length})`
     }))
   ];
   fillSelect(elements.developer, developers, state.developer);
 
-  const qaNames = [...new Set(data.issues.map((issue) => issue.qaOwner?.name).filter(Boolean))].sort();
   fillSelect(
     elements.qa,
-    [{ value: ALL, label: 'All QA' }, ...qaNames.map((name) => ({ value: name, label: name }))],
+    [{ value: ALL, label: 'All QA' }, ...qaInScope().map((name) => ({ value: name, label: name }))],
     state.qa
   );
 };
@@ -425,14 +485,16 @@ const render = () => {
   const issues = visibleIssues();
   const totals = countBuckets(issues);
 
-  elements.teamName.textContent = data.team;
+  showEstimates = issues.some((issue) => issue.estimateDays !== null);
+
+  elements.teamName.textContent = state.team === ALL ? data.team : state.team;
   elements.boardMeta.textContent = [
     data.sprint ? data.sprint.name : 'No sprint selected',
     `${issues.length} of ${data.issues.length} tickets`,
     `updated ${relativeTime(data.generatedAt)}`
   ].join(' · ');
 
-  const laneCounts = countBuckets(data.issues.filter(matchesPeople));
+  const laneCounts = countBuckets(teamIssues().filter(matchesPeople));
   elements.totals.innerHTML = LANE_ORDER.map(
     (bucket) => `
     <button type="button" class="lane-chip${state.lane === bucket ? ' lane-chip--active' : ''}"
@@ -459,6 +521,33 @@ const render = () => {
 
 };
 
+/* ---------- remembering the lead's picks ---------- */
+
+const STORAGE_KEY = 'standup-selection';
+
+const remember = () => {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ team: state.team, sprintId: state.sprintId, developer: state.developer, qa: state.qa })
+    );
+  } catch {
+    // A locked-down browser just means the picks don't persist; not worth failing over.
+  }
+};
+
+const recall = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if (saved.team) state.team = saved.team;
+    if (saved.sprintId) state.sprintId = saved.sprintId;
+    if (saved.developer) state.developer = saved.developer;
+    if (saved.qa) state.qa = saved.qa;
+  } catch {
+    // Ignore anything unparseable and start from defaults.
+  }
+};
+
 /* ---------- data ---------- */
 
 const load = async ({ force = false } = {}) => {
@@ -480,7 +569,13 @@ const load = async ({ force = false } = {}) => {
 
     // A developer or QA who has no tickets in the newly chosen sprint shouldn't
     // leave the board looking empty.
-    const developerIds = new Set([ALL, ...payload.developers.map((developer) => developer.accountId)]);
+    // config.json can name the team, so the board opens on it without a click.
+    if (state.team === ALL && payload.defaultJiraTeam && payload.teams?.includes(payload.defaultJiraTeam)) {
+      state.team = payload.defaultJiraTeam;
+    }
+    if (state.team !== ALL && !payload.teams?.includes(state.team)) state.team = ALL;
+
+    const developerIds = new Set([ALL, ...payload.issues.map((issue) => issue.assignee?.accountId || 'unassigned')]);
     if (!developerIds.has(state.developer)) state.developer = ALL;
 
     const qaNames = new Set([ALL, ...payload.issues.map((issue) => issue.qaOwner?.name).filter(Boolean)]);
@@ -516,19 +611,31 @@ window.addEventListener('hashchange', () => {
   render();
 });
 
+elements.team.addEventListener('change', () => {
+  state.team = elements.team.value;
+  state.developer = ALL;
+  state.qa = ALL;
+  remember();
+  syncSelectors(state.data);
+  render();
+});
+
 elements.sprint.addEventListener('change', () => {
   state.sprintId = elements.sprint.value;
+  remember();
   load();
 });
 
 // Developer and QA filter what is already loaded, so switching is instant.
 elements.developer.addEventListener('change', () => {
   state.developer = elements.developer.value;
+  remember();
   render();
 });
 
 elements.qa.addEventListener('change', () => {
   state.qa = elements.qa.value;
+  remember();
   render();
 });
 
@@ -547,5 +654,6 @@ elements.lookback.addEventListener('change', () => {
 
 elements.refresh.addEventListener('click', () => load({ force: true }));
 
+recall();
 syncTabs();
 load();

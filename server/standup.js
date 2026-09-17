@@ -329,19 +329,47 @@ const resolveSprintClause = async (jira, config, requestedSprintId) => {
   return { clause: `sprint = ${active.id}`, sprint: active, sprints, boardId };
 };
 
-const findStoryPointsFieldId = async (jira) => {
+let fieldCache = null;
+
+const jiraFields = async (jira) => {
+  if (fieldCache) return fieldCache;
   try {
-    const fields = await jira.fields();
-    const match = fields.find((field) => /story point/i.test(field.name || ''));
-    return match?.id || null;
+    fieldCache = await jira.fields();
   } catch {
-    return null;
+    fieldCache = [];
   }
+  return fieldCache;
+};
+
+const findStoryPointsFieldId = async (jira) => {
+  const fields = await jiraFields(jira);
+  return fields.find((field) => /story point/i.test(field.name || ''))?.id || null;
+};
+
+/** Jira's Team field, when the site has one — that is what groups the 5 teams. */
+const findTeamFieldId = async (jira, config) => {
+  if (config.teamFieldId) return config.teamFieldId;
+
+  const fields = await jiraFields(jira);
+  return (
+    fields.find((field) => /^team$/i.test((field.name || '').trim()))?.id ||
+    fields.find((field) => /\bteam\b/i.test(field.name || ''))?.id ||
+    null
+  );
+};
+
+/** The Team field comes back as a string, an object, or a list of either. */
+const readTeamName = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return readTeamName(value[0]);
+  return value.name || value.title || value.value || value.displayName || null;
 };
 
 export const buildStandup = async (jira, config, { lookbackHours, sprintId }) => {
   const { clause: sprintClause, sprint, sprints, boardId } = await resolveSprintClause(jira, config, sprintId);
   const storyPointsFieldId = await findStoryPointsFieldId(jira);
+  const teamFieldId = await findTeamFieldId(jira, config);
 
   const { resolved: teamMembers, unresolved } = await resolveTeamMembers(jira, config);
   const accountIds = teamMembers.map((member) => member.accountId).filter(Boolean);
@@ -360,6 +388,7 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
     'timeoriginalestimate',
     'timeestimate',
     ...(storyPointsFieldId ? [storyPointsFieldId] : []),
+    ...(teamFieldId ? [teamFieldId] : []),
     ...(config.qaFieldId ? [config.qaFieldId] : [])
   ];
 
@@ -389,6 +418,7 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
       bucket,
       labels,
       storyPoints: storyPointsFieldId ? raw.fields[storyPointsFieldId] ?? null : null,
+      jiraTeam: teamFieldId ? readTeamName(raw.fields[teamFieldId]) : null,
       dueDate: raw.fields.duedate || null,
       parentKey: raw.fields.parent?.key || null,
       updated: raw.fields.updated,
@@ -415,9 +445,14 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
     return issue;
   });
 
+  const teams = [...new Set(issues.map((issue) => issue.jiraTeam).filter(Boolean))].sort();
+
   return {
     generatedAt: new Date().toISOString(),
     team: config.team.name,
+    teams,
+    teamFieldFound: Boolean(teamFieldId),
+    defaultJiraTeam: config.team.jiraTeam || null,
     jql,
     sprint,
     sprints,
