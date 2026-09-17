@@ -193,10 +193,23 @@ count against the estimate.
 
 ## PR status
 
-PRs come from Jira's own development panel (the "Development" box on an issue), so it uses the
-GitHub↔Jira integration your project already has — **no GitHub token needed**. Each ticket shows
-open / merged / declined plus approval count, and an open PR untouched for longer than
-`stalePrDays` gets flagged.
+PRs come from two places, merged together:
+
+1. **Jira's development panel** — the "Development" box on an issue, populated by the
+   GitHub↔Jira integration when a branch or commit names the ticket. Gives state and reviewers.
+2. **Links in the ticket description** — a PR pasted in as a smart link or plain URL. The
+   development panel never sees these, which is why a ticket with an obvious PR link could still
+   read "No PR".
+
+Description-linked PRs show as `PR #9129` with a dashed border, meaning the link is known but
+its state is not. To fill that in, add a GitHub token to `.env`:
+
+```
+GITHUB_TOKEN=ghp_...
+```
+
+A token also lifts GitHub's rate limit and reaches private repos. Without one, public repos are
+still queried unauthenticated, so state often resolves anyway.
 
 That endpoint is an internal Jira API. If your site doesn't expose it, PR badges simply don't
 render — the rest of the board is unaffected. If your team links Bitbucket instead of GitHub,

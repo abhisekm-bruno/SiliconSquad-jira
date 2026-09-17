@@ -1,4 +1,5 @@
 import { mapWithConcurrency } from './jira.js';
+import { fetchPullRequest, findPullRequestLinks } from './github.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BUCKET_ORDER = ['todo', 'inProgress', 'inReview', 'qa', 'done'];
@@ -200,6 +201,21 @@ const summarisePullRequest = (pullRequest) => ({
     approved: Boolean(reviewer.approved)
   }))
 });
+
+/** The same PR can arrive from both sources; the dev panel's copy wins. */
+const mergePullRequests = (fromPanel, fromDescription) => {
+  const numberOf = (pullRequest) => {
+    const match = /\/pull\/(\d+)/.exec(pullRequest.url || '');
+    return match ? match[1] : pullRequest.url || pullRequest.id;
+  };
+
+  const byNumber = new Map();
+  for (const pullRequest of [...fromDescription, ...fromPanel]) {
+    byNumber.set(numberOf(pullRequest), pullRequest);
+  }
+
+  return [...byNumber.values()];
+};
 
 const computeFlags = (issue, thresholds) => {
   const flags = [];
@@ -474,6 +490,7 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
     'parent',
     'timeoriginalestimate',
     'timeestimate',
+    'description',
     ...(storyPointsFieldId ? [storyPointsFieldId] : []),
     ...teamCandidates.map((candidate) => candidate.id),
     ...(config.qaFieldId ? [config.qaFieldId] : [])
@@ -483,10 +500,19 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
   const teamField = pickTeamField(teamCandidates, rawIssues);
 
   const issues = await mapWithConcurrency(rawIssues, 5, async (raw) => {
-    const [histories, pullRequests] = await Promise.all([
+    const [histories, devPanelPullRequests, describedPullRequests] = await Promise.all([
       jira.changelog(raw.key).catch(() => []),
-      jira.pullRequests(raw.id, config.devStatusApplicationTypes).catch(() => [])
+      jira.pullRequests(raw.id, config.devStatusApplicationTypes).catch(() => []),
+      // PRs pasted into the description never reach the development panel.
+      mapWithConcurrency(findPullRequestLinks(raw.fields.description), 4, (link) =>
+        fetchPullRequest(link, process.env.GITHUB_TOKEN).catch(() => null)
+      )
     ]);
+
+    const pullRequests = mergePullRequests(
+      devPanelPullRequests.map(summarisePullRequest),
+      describedPullRequests.filter(Boolean)
+    );
 
     const transitions = statusTransitions(histories);
     const statusName = raw.fields.status?.name || 'Unknown';
@@ -518,7 +544,7 @@ export const buildStandup = async (jira, config, { lookbackHours, sprintId }) =>
             avatar: raw.fields.assignee.avatarUrls?.['24x24'] || null
           }
         : null,
-      pullRequests: pullRequests.map(summarisePullRequest),
+      pullRequests,
       transitions,
       timeline: buildTimeline(transitions, config.workflow, raw.fields.created, statusName),
       qaOwner: deriveQaOwner(

@@ -24,7 +24,7 @@ const nextLoadingMessage = () => {
   loadingMessage = LOADING_MESSAGES[loadingCursor];
   return loadingMessage;
 };
-const VIEWS = ['standup', 'board', 'activity', 'attention'];
+const VIEWS = ['standup', 'attention'];
 const ALL = '__all__';
 
 const state = {
@@ -168,6 +168,16 @@ const renderPullRequestCell = (issue) => {
   return issue.pullRequests
     .map((pullRequest) => {
       const status = String(pullRequest.status || '').toLowerCase();
+      const number = /\/pull\/(\d+)/.exec(pullRequest.url || '')?.[1];
+
+      // A PR found in the description has no state until GitHub answers.
+      if (!status) {
+        return `<a class="pr pr--unknown" href="${escapeHtml(pullRequest.url)}" target="_blank" rel="noreferrer"
+          title="Linked in the ticket description. Add GITHUB_TOKEN to .env to show its state.">
+          <span class="pr__status">PR #${escapeHtml(number || '?')}</span>
+        </a>`;
+      }
+
       const label = status === 'merged' ? 'Merged' : status === 'declined' ? 'Declined' : 'Open';
       const reviewers = pullRequest.reviewers || [];
       const approvals = reviewers.filter((reviewer) => reviewer.approved).length;
@@ -200,12 +210,14 @@ const renderEstimateCell = (issue) => {
 
 const renderQaCell = (issue) => {
   if (!issue.qaOwner) {
-    return issue.bucket === 'qa' ? '<span class="person person--pending">picking up</span>' : '<span class="person person--none">—</span>';
+    return issue.bucket === 'qa'
+      ? '<div class="person-qa person-qa--pending">QA · picking up</div>'
+      : '';
   }
 
   const signedOff = Boolean(issue.timeline.qaHandover);
-  return `<span class="person${signedOff ? ' person--signed' : ''}"
-    title="${signedOff ? 'Signed off to Done' : 'Last handled QA on this ticket'}">${escapeHtml(issue.qaOwner.name)}</span>`;
+  return `<div class="person-qa${signedOff ? ' person-qa--signed' : ''}"
+    title="${signedOff ? 'Signed off to Done' : 'Last handled QA on this ticket'}">QA · ${escapeHtml(issue.qaOwner.name)}</div>`;
 };
 
 const renderFlags = (flags) =>
@@ -221,8 +233,7 @@ const tableHead = () => `
     <tr>
       <th class="col-key">Ticket</th>
       <th class="col-title">Title</th>
-      <th class="col-person">Developer</th>
-      <th class="col-person">QA</th>
+      <th class="col-people">Dev / QA</th>
       ${showEstimates ? '<th class="col-est">Est.</th>' : ''}
       <th class="col-pr">PR</th>
       <th class="col-status">Status</th>
@@ -239,10 +250,10 @@ const renderRow = (issue) => `
       ${escapeHtml(shortTitle(issue.summary))}
       ${issue.flags.length ? `<div class="row__flags">${renderFlags(issue.flags)}</div>` : ''}
     </td>
-    <td class="col-person">
-      <span class="person${issue.assignee ? '' : ' person--none'}">${escapeHtml(issue.assignee?.name || 'Unassigned')}</span>
+    <td class="col-people">
+      <div class="person${issue.assignee ? '' : ' person--none'}">${escapeHtml(issue.assignee?.name || 'Unassigned')}</div>
+      ${renderQaCell(issue)}
     </td>
-    <td class="col-person">${renderQaCell(issue)}</td>
     ${showEstimates ? `<td class="col-est">${renderEstimateCell(issue)}</td>` : ''}
     <td class="col-pr">${renderPullRequestCell(issue)}</td>
     <td class="col-status">
@@ -312,70 +323,6 @@ const renderStandup = () => {
 };
 
 /* ---------- other views ---------- */
-
-const renderBoard = () => {
-  const issues = visibleIssues();
-
-  return `
-    <div class="board">
-      ${LANE_ORDER.map((bucket) => {
-        const laneIssues = issues.filter((issue) => issue.bucket === bucket);
-        return `
-          <section class="column" style="--lane: ${laneColor(bucket)}">
-            <header class="column__header">
-              <span>${LANES[bucket].label}</span>
-              <span class="column__count">${laneIssues.length}</span>
-            </header>
-            ${laneIssues
-              .map(
-                (issue) => `
-              <div class="card">
-                <a class="card__key" href="${escapeHtml(issue.url)}" target="_blank" rel="noreferrer">${escapeHtml(issue.key)}</a>
-                <div class="card__title" title="${escapeHtml(issue.summary)}">${escapeHtml(shortTitle(issue.summary, 60))}</div>
-                <div class="card__meta">
-                  <span class="person">${escapeHtml(issue.assignee?.name || 'Unassigned')}</span>
-                  ${renderEstimateCell(issue)}
-                </div>
-                <div class="card__meta">${renderPullRequestCell(issue)}</div>
-                ${issue.flags.length ? `<div class="row__flags">${renderFlags(issue.flags)}</div>` : ''}
-              </div>`
-              )
-              .join('')}
-          </section>`;
-      }).join('')}
-    </div>`;
-};
-
-const renderActivity = () => {
-  const keys = new Set(visibleIssues().map((issue) => issue.key));
-  const activity = state.data.activity.filter((event) => keys.has(event.key));
-
-  if (!activity.length) {
-    return '<p class="placeholder">No status changes in this window for the current selection.</p>';
-  }
-
-  const renderEvent = (event) => `
-    <div class="event" style="--lane: ${laneColor(event.toBucket)}">
-      <a class="card__key" href="${escapeHtml(event.url)}" target="_blank" rel="noreferrer">${escapeHtml(event.key)}</a>
-      <span class="event__summary" title="${escapeHtml(event.summary)}">${escapeHtml(shortTitle(event.summary))}</span>
-      <span class="event__move">
-        <span class="event__from">${escapeHtml(event.from || '—')}</span>
-        <span>→</span>
-        <span class="status-pill" style="--lane: ${laneColor(event.toBucket)}">${escapeHtml(event.to)}</span>
-      </span>
-      <span class="event__actor">by ${escapeHtml(event.by)}</span>
-      <span class="event__time">${relativeTime(event.at)}</span>
-    </div>`;
-
-  const group = (title, events) =>
-    events.length ? `<h2 class="section-title">${title} (${events.length})</h2>${events.map(renderEvent).join('')}` : '';
-
-  return [
-    group('Handed to QA', activity.filter((event) => event.isQaHandoff)),
-    group('QA signed off to Done', activity.filter((event) => event.isQaSignoff)),
-    group('Other moves', activity.filter((event) => !event.isQaHandoff && !event.isQaSignoff))
-  ].join('');
-};
 
 const renderAttention = () => {
   const issues = visibleIssues().filter((issue) => issue.flags.some((flag) => flag.severity === 'high'));
@@ -465,9 +412,21 @@ const renderTeamNotice = (data) => {
 
 /* ---------- selectors ---------- */
 
+const renderOption = (option, selected) =>
+  `<option value="${escapeHtml(option.value)}"${String(option.value) === String(selected) ? ' selected' : ''}>${escapeHtml(option.label)}</option>`;
+
 const fillSelect = (select, options, selected) => {
-  select.innerHTML = options
-    .map((option) => `<option value="${escapeHtml(option.value)}"${String(option.value) === String(selected) ? ' selected' : ''}>${escapeHtml(option.label)}</option>`)
+  select.innerHTML = options.map((option) => renderOption(option, selected)).join('');
+};
+
+/** Same, but with <optgroup> headings — [{ label, options }]. */
+const fillGroupedSelect = (select, groups, selected) => {
+  select.innerHTML = groups
+    .filter((group) => group.options.length)
+    .map(
+      (group) =>
+        `<optgroup label="${escapeHtml(group.label)}">${group.options.map((option) => renderOption(option, selected)).join('')}</optgroup>`
+    )
     .join('');
 };
 
@@ -573,7 +532,7 @@ const render = () => {
   }
 
   const notice = renderTeamNotice(data);
-  const views = { standup: renderStandup, board: renderBoard, activity: renderActivity, attention: renderAttention };
+  const views = { standup: renderStandup, attention: renderAttention };
   elements.view.innerHTML = notice + views[state.view]();
   return;
 
